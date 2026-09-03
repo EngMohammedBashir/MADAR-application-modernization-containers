@@ -1,207 +1,111 @@
-# 📍 Phase 05 — Current State
+# 📍 Phase 05 — Final State
 
-**Status:** 🟠 VALIDATION COMPLETE / CLEANUP NEXT  
-**Region:** `us-east-1`  
-**Last synchronized:** 2026-09-03
+> 🟢 **STATUS: COMPLETE • VALIDATED • CLEANED UP**  
+> 📅 Finalized: **2026-09-03** · 🌎 `us-east-1`
 
-## 🚦 Executive State
+## 🏆 Executive State
 
-```text
-🧾 Gate 0 / account & cost preflight       ✅ PASS / GO
-🔎 Legacy AMI recovery                     ✅ COMPLETE
-🐳 Containerization + local validation     ✅ COMPLETE
-📦 Application ECR image                   ✅ v1 PUBLISHED
-🌐 VPC / routing / security groups         ✅ COMPLETE
-🐘 Private RDS PostgreSQL                  ✅ AVAILABLE
-🗃️ Legacy PostgreSQL dump recovery         ✅ COMPLETE
-♻️ Controlled DB restore on Fargate        ✅ COMPLETE
-🔐 Secrets Manager + IAM                   ✅ COMPLETE
-🚀 ECS / Fargate service                   ✅ RUNNING
-⚖️ ALB + healthy target                    ✅ COMPLETE
-🩺 End-to-end app → DB validation          ✅ PASS
-♻️ Task self-healing                       ✅ PASS
-📈 Target-tracking scale-out               ✅ PASS
-🔌 RDS dependency failure/recovery         ✅ PASS
-📊 Observability evidence                  ✅ CAPTURED
-💰 Cost checkpoint                         ✅ CAPTURED (~$0.00 visible)
-🧹 Final cleanup                           ⏳ NEXT
-🔍 Residual audit                          ⏳ AFTER CLEANUP
-```
+| Workstream | Final state |
+|---|---|
+| 🧾 Account / cost preflight | ✅ PASS |
+| 🔎 Legacy recovery | ✅ COMPLETE |
+| 🐳 Docker modernization | ✅ COMPLETE |
+| 📦 ECR publication | ✅ COMPLETE → 🧹 DELETED after evidence |
+| 🌐 Phase 05 network | ✅ VALIDATED → 🧹 DELETED |
+| 🐘 RDS PostgreSQL | ✅ VALIDATED → 🧹 DELETED |
+| 🗃️ Legacy DB recovery/restore | ✅ PASS |
+| 🚀 ECS Fargate + ALB | ✅ PASS → 🧹 DELETED |
+| ♻️ Self-healing | ✅ PASS |
+| 📈 Automatic scale-out | ✅ PASS |
+| 🔌 DB dependency failure/recovery | ✅ PASS |
+| 📊 Observability | ✅ CAPTURED |
+| 💰 Cost closeout | ✅ CAPTURED |
+| 🔍 Residual audit | ✅ CLEAN |
 
-## 🔗 Phase 03 Continuity
-
-Intentionally retained artifacts:
+## 🔗 Intentionally Retained for Later MADAR Phases
 
 ```text
-AMI       ami-0cbd2e9ec0d6f9168
-Snapshot  snap-0920a020c47fb6447
-S3        madar-operational-files-197821101770
+AMI       ami-0cbd2e9ec0d6f9168        AVAILABLE
+Snapshot  snap-0920a020c47fb6447        COMPLETED
+S3        madar-operational-files-197821101770  ACCESSIBLE
+DB dump   s3://madar-operational-files-197821101770/database-backups/madar_legacy_final.dump
 ```
 
-The retained AMI supplied the application source. The retained snapshot later supplied the authoritative PostgreSQL custom dump after S3 was found to contain operational exports/reports but not the database backup needed for full restoration.
+These are continuity assets, not forgotten Phase 05 runtime resources.
 
-The recovered dump was copied to:
+## 🧹 What I Deleted
+
+I removed the Phase 05 scaling target/policy, ECS service/tasks/cluster, ALB/target group, RDS/subnet group, Secrets Manager secret, CloudWatch log group, both ECR repositories, Phase 05 IAM roles/policies, three custom security groups, four subnets, two custom route tables, IGW and the Phase 05 VPC.
+
+The final audit reported Phase 05 runtime resources as **DELETED** while the Phase 03 AMI, snapshot and S3 bucket remained retained. See `evidence/phase05-residual-audit.png`.
+
+## 🧪 What I Actually Proved
 
 ```text
-s3://madar-operational-files-197821101770/database-backups/madar_legacy_final.dump
+/api/health through ALB      → 200
+/api/ready with PostgreSQL   → 200
+Intentional task failure     → ECS replacement/self-healing
+Target tracking under load   → automatic 1 → 2 scale-out
+DB SG rule revoked           → health 200 / ready 502 through ALB
+DB SG rule restored          → health 200 / ready 200
+Restore task                 → exit 0 / RESTORE COMPLETED SUCCESSFULLY
 ```
 
-Temporary snapshot-inspection EC2/EBS/SG resources were removed after recovery.
+⚠️ I do **not** claim a separately evidenced automatic scale-in event.
 
-## 🐳 Application Runtime
+## 🧯 Problems I Hit and How I Recovered
+
+| Problem | What it taught me / fix |
+|---|---|
+| Imported VMware AMI did not accept the selected EC2 key pair | The imported guest retained its old OS SSH state; I used the preserved OS access only for recovery, then removed the temporary EC2/EBS/SG. |
+| First Fargate task failed at startup | The Secrets Manager JSON was malformed. I rewrote the secret safely, verified key names without printing the password, and the next task started. |
+| Direct Fargate public-IP test timed out | This was expected: ECS-SG accepted `8080` only from ALB-SG. I treated this as proof that the security boundary worked. |
+| S3 did not contain a full DB dump | I inspected the retained Phase 03 snapshot read-only, recovered the authoritative custom dump, stored it in S3, and restored it with a one-off Fargate task. |
+| Auto Scaling did not trigger initially at 40% | For a controlled test I temporarily used a 5% target, generated load, proved scale-out, then restored 40%. |
+| Application readiness surfaced as 502 during DB failure | I documented the observed ALB-facing result exactly instead of rewriting it as the application's intended internal 503. |
+| AWS CLI token expired during RDS deletion wait | I refreshed the CLI session and re-ran the waiter; I did not trust a PowerShell success message that ran after a failed command. |
+
+## 🏭 What I Would Change for Production
+
+Because this was a short-lived, cost-constrained portfolio lab, I deliberately did **not** implement several production controls:
+
+- 🔒 private Fargate tasks with NAT and/or VPC endpoints;
+- 🔏 ACM TLS, HTTPS `443`, HTTP→HTTPS redirect and owned DNS;
+- 🐘 encrypted Multi-AZ RDS with backups and stronger recovery policy;
+- 👤 least-privilege PostgreSQL application user instead of the lab master-user path;
+- 🧱 WAF and broader edge/security hardening;
+- 🏗️ Terraform/IaC and remote state;
+- 🔁 CI/CD with deployment approvals and automated rollback;
+- 📣 production alerting/SNS and richer dashboards;
+- 📈 a separately evidenced scale-in test;
+- ☸️ Kubernetes/EKS, intentionally outside this phase.
+
+These are documented gaps, not claims of deployed controls.
+
+## 🧭 If I Had to Rebuild It Without Assistance
+
+I would follow this order:
 
 ```text
-App image       madar-phase05-app:v1
-Base            python:3.12-slim
-Runtime         Gunicorn / 2 workers
-Port            8080
-User            madar / non-root
-Liveness        /api/health
-Readiness       /api/ready
-ECS cluster     MADAR-P05-Cluster
-ECS service     MADAR-P05-App-Service
-Task definition madar-phase05-app:1
-CPU / memory    256 / 512 MiB
+1. Verify account/cost + retained AMI/snapshot/S3
+2. Recover source and remove VM assumptions
+3. Build/test Docker image locally
+4. Push application image to ECR
+5. Build VPC + SG chain + private RDS
+6. Store DB credentials in Secrets Manager
+7. Recover/restore legacy DB if required
+8. Create execution/task IAM roles
+9. Register Fargate task definition
+10. Create TG + ALB + ECS service
+11. Validate health/readiness/dashboard
+12. Test self-healing + controlled scaling + DB dependency
+13. Capture observability/cost evidence
+14. Cleanup in dependency-safe order
+15. Run residual audit and verify retained assets
 ```
 
-The service is reachable only through the ALB on the application path; direct inbound TCP/8080 from the Internet is not permitted by the ECS security group.
+The detailed commands and reasoning live in `runbooks/00-execution-runbook.md` and `runbooks/99-cleanup-runbook.md`.
 
-## ⚖️ ALB / Service Path
+## 🏁 Final Statement
 
-```text
-ALB             MADAR-P05-ALB
-DNS             MADAR-P05-ALB-727499775.us-east-1.elb.amazonaws.com
-Listener        HTTP :80
-Target group    MADAR-P05-TG
-Target type     ip
-Target port     8080
-Health path     /api/health
-```
-
-Validated through the ALB:
-
-```text
-/api/health  → HTTP 200
-/api/ready   → HTTP 200 with PostgreSQL connected
-Dashboard    → rendered successfully
-```
-
-## 🐘 Database / Restore
-
-```text
-RDS ID               madar-p05-postgres
-Engine               PostgreSQL 18.3
-Database             madar_legacy
-Class                db.t4g.micro
-Storage              20 GB gp3
-Single-AZ            yes
-PubliclyAccessible   false
-DB subnet group      madar-p05-db-subnet-group
-```
-
-Restore path:
-
-```text
-Retained Phase 03 snapshot
-  → read-only inspection
-  → madar_legacy_final.dump
-  → S3 database-backups/
-  → temporary restore container
-  → one-off Fargate restore task
-  → RDS PostgreSQL
-```
-
-Restore task `5614c8240a514ba8a25b6ed6c281cd36` exited `0` and CloudWatch recorded `RESTORE COMPLETED SUCCESSFULLY`. A separate DB verification task also exited `0`.
-
-Temporary restore artifacts currently include:
-
-```text
-ECR repo       madar-p05-restore:v1
-Task role      MADAR-P05-Restore-TaskRole
-Task def       madar-p05-db-restore:1
-Verify taskdef madar-p05-db-verify:1
-```
-
-These are Phase 05 cleanup targets.
-
-## 🔐 Security / IAM
-
-```text
-Internet :80
-   ↓
-ALB-SG  sg-00b9b70e13293ff46
-   ↓ :8080
-ECS-SG  sg-0d13f6af551e284c8
-   ↓ :5432
-RDS-SG  sg-00ae439cb916d164b
-```
-
-The RDS ingress rule was deliberately revoked during failure injection and then restored. Current restored rule ID: `sgr-0eb29e1e3032db334`.
-
-Execution role: `MADAR-P05-ECS-ExecutionRole` with standard ECS execution permissions plus narrowly scoped secret retrieval. Restore task role: `MADAR-P05-Restore-TaskRole` with `s3:GetObject` limited to the single recovered dump object.
-
-## ♻️ Reliability Tests
-
-### Task self-healing — PASS
-
-At desired count 2, one service task was intentionally stopped. ECS detected the mismatch, started a replacement, ALB drained the old target, and `/api/ready` remained HTTP 200 during the event. The service returned to two running tasks and healthy targets.
-
-### Target-tracking scale-out — PASS
-
-Application Auto Scaling:
-
-```text
-Min capacity       1
-Max capacity       2
-Metric             ECSServiceAverageCPUUtilization
-Final target       40%
-Cooldowns          60s / 60s
-```
-
-For controlled validation only, the target was temporarily lowered to 5%. Load drove average CPU above the test threshold, the CloudWatch high alarm entered `ALARM`, the target-tracking policy triggered, and ECS changed desired count from 1 to 2 automatically. The policy was then restored to the intended 40% target.
-
-Only scale-out is claimed as validated; no unsupported scale-in claim is made.
-
-### RDS dependency failure/recovery — PASS
-
-The ECS→RDS TCP/5432 SG rule was revoked intentionally:
-
-```text
-During failure: /api/health = 200
-During failure: /api/ready  = 502 observed through ALB
-After restore:  /api/health = 200
-After restore:  /api/ready  = 200
-```
-
-This demonstrated that application liveness remained healthy while the DB-backed readiness path failed, then recovered after the exact dependency rule was restored.
-
-## 📊 Observability
-
-Captured evidence includes:
-
-- ECS service/task state,
-- ALB target health,
-- RDS availability/private state,
-- CloudWatch log streams,
-- ECS CPU and memory,
-- ALB request volume,
-- RDS database connections.
-
-## 💰 Cost Checkpoint
-
-Cost Explorer checkpoint for 2026-09-01 through 2026-09-03 showed only negligible values (`~$0.00` visible at capture time). Cost Explorer can lag, so this is a checkpoint rather than a claim of final zero cost.
-
-## ▶️ NEXT — Destructive Cleanup
-
-1. Remove Application Auto Scaling policy/scalable target.
-2. Scale service to zero and delete it.
-3. Delete ALB/listener/target group.
-4. Deregister app/restore/verify task definitions and delete ECS cluster.
-5. Delete RDS, DB subnet group, secret and CloudWatch log group.
-6. Delete both Phase 05 ECR repositories.
-7. Remove Phase 05 IAM roles/policies.
-8. Delete SGs, subnets, route tables, IGW and Phase 05 VPC.
-9. Run residual-resource audit and final cost closeout.
-10. Preserve the Phase 03 AMI/snapshot/S3 unless a separate retention decision is made.
-
-📸 Evidence is indexed in `evidence/README.md`.
+**Phase 05 is closed.** The AWS runtime was intentionally destroyed after validation; the reproducible engineering story, evidence, decisions and retained continuity assets remain.
