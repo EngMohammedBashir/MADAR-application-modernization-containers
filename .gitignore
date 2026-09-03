@@ -1,11 +1,22 @@
-# Python
+# 🧹 MADAR Phase 05 — Repository Hygiene
+# Keep source, runbooks, ADRs and curated evidence in Git.
+# Keep credentials, local runtime state, recovered raw artifacts and generated build output out.
+
+# 🐍 Python runtime / caches
 __pycache__/
 *.py[cod]
+*$py.class
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
 .venv/
 venv/
+env/
 
-# Secrets / local configuration
+# 🔐 Secrets / credentials / private material
 .env
 .env.*
 !.env.example
@@ -13,23 +24,65 @@ venv/
 *.key
 *.p12
 *.pfx
+*.crt
+*.cer
 credentials*
 secrets*
+.aws/
+aws_credentials*
 
-# Docker / build artifacts
+# 🐳 Docker / local build output
 *.tar
+*.tar.gz
+*.tgz
 *.log
 build/
 dist/
+*.egg-info/
 
-# OS / editor
+# 🗃️ Database dumps / raw recovery material
+# The authoritative Phase 03 dump is retained in S3, not committed to Git.
+*.dump
+*.sql
+*.sql.gz
+*.sql.dump
+*.backup
+*.bak
+legacy-dump/
+recovered-private/
+recovery-work/
+restore-work/
+
+# ☁️ Infrastructure / CLI local state
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl.backup
+terraform.tfvars
+*.tfvars.json
+.aws-sam/
+cdk.out/
+
+# 🧪 Temporary test / scratch files
+.tmp/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~
+
+# 💻 OS / editor
 .DS_Store
 Thumbs.db
+desktop.ini
 .vscode/
 .idea/
 
-# Local data / recovered VM artifacts
-recovered-private/
-legacy-dump/
-*.sql.dump
-*.backup
+# 📸 Evidence policy
+# Curated reviewer-safe screenshots under evidence/ ARE intentionally tracked.
+# Do not add a blanket evidence/ ignore rule.
+
+# 🛡️ IMPORTANT
+# If a secret was already committed, adding it here does NOT remove it from Git history.
+# Rotate/revoke the credential and remove it from tracked history separately.
