@@ -1,206 +1,191 @@
-# Phase 05 Cleanup Runbook
+# 🧹 Phase 05 — Cleanup Runbook
 
-> Execute only after all required evidence and cost snapshots are captured.
+> ⚠️ Execute only after all required functionality, failure/scaling evidence and cost screenshots are captured.  
+> 🎯 Goal: return Phase 05 to zero/near-zero ongoing cost while preserving Git evidence and the intentionally retained Phase 03 artifacts.
 
-## Principles
+## 🧠 Principles
 
-- remove resources from consumer/service layer downward,
-- wait for asynchronous deletions before removing dependencies,
-- verify every destructive step,
-- do not create a final RDS snapshot unless retention is intentionally approved,
-- run a residual-resource audit before declaring Phase 05 closed.
+- 🧱 remove consumer/service layers before dependencies,
+- ⏳ wait for asynchronous AWS deletions,
+- 🔍 verify every destructive step,
+- 🚫 skip final RDS snapshot unless retention is intentionally approved,
+- 🔐 never print secret values,
+- 🧾 run a final residual-resource audit before declaring Phase 05 closed.
 
-## 1. Disable application auto scaling
+## 📍 Known Live Foundation at Current Checkpoint
 
-Before deleting the ECS service, remove scalable targets/policies created for the service.
-
-Verify no scaling policy continues to manage desired count.
-
-## 2. Scale ECS service to zero
-
-```bash
-AWS_PAGER="" aws ecs update-service \
-  --region us-east-1 \
-  --cluster <cluster> \
-  --service <service> \
-  --desired-count 0
+```text
+VPC        vpc-011a441b0a790c458
+IGW        igw-0df8ed399478fa879
+Public RT  rtb-076fdacedac35cd66
+Private RT rtb-0ed3daeca13e9987e
+ALB-SG     sg-00b9b70e13293ff46
+ECS-SG     sg-0d13f6af551e284c8
+RDS-SG     sg-00ae439cb916d164b
+RDS        madar-p05-postgres
+DB subnet  madar-p05-db-subnet-group
+Secret     MADAR/Phase05/Postgres
+ECR        madar-phase05-app
+IAM role   MADAR-P05-ECS-ExecutionRole
 ```
 
-Wait until no running tasks remain.
+Additional ECS/ALB/log/scaling resources will be added during later gates and must also be removed.
 
-## 3. Delete ECS service
+## 1️⃣ Disable Application Auto Scaling
 
-```bash
-AWS_PAGER="" aws ecs delete-service \
-  --region us-east-1 \
-  --cluster <cluster> \
-  --service <service>
-```
+Remove ECS scalable targets/policies created during the scaling test. Verify no policy continues to manage desired count.
 
-Verify service/tasks are gone before continuing.
-
-## 4. Delete ALB listener/rules
-
-List listeners first:
+## 2️⃣ Scale ECS Service to Zero
 
 ```bash
-AWS_PAGER="" aws elbv2 describe-listeners \
-  --region us-east-1 \
-  --load-balancer-arn <alb-arn> \
-  --output table
+aws ecs update-service --region us-east-1 --cluster <cluster> --service <service> --desired-count 0
 ```
 
-Delete the listener(s), then verify none remain.
+Wait until no running service tasks remain.
 
-## 5. Delete ALB
+## 3️⃣ Delete ECS Service
 
-```bash
-AWS_PAGER="" aws elbv2 delete-load-balancer \
-  --region us-east-1 \
-  --load-balancer-arn <alb-arn>
-```
+Delete the service only after tasks have drained. Verify service/tasks are gone.
 
-Wait until `describe-load-balancers` no longer returns the ALB.
+## 4️⃣ Delete ALB Listener / Rules
 
-## 6. Delete target group
+List and delete the HTTP listener/rules created for the lab.
 
-After the load balancer/listener no longer references it:
+## 5️⃣ Delete ALB
 
-```bash
-AWS_PAGER="" aws elbv2 delete-target-group \
-  --region us-east-1 \
-  --target-group-arn <target-group-arn>
-```
+Delete the Phase 05 ALB and wait until it disappears from `describe-load-balancers`.
 
-## 7. Deregister ECS task-definition revisions
+## 6️⃣ Delete Target Group
 
-List the Phase 05 task definitions, then deregister revisions used by the lab.
+Delete only after no listener/load balancer references it.
 
-Historical `INACTIVE` task definition metadata may remain visible; document this accurately rather than claiming physical deletion if AWS retains metadata.
+## 7️⃣ Deregister Task Definition Revisions
 
-## 8. Delete ECS cluster
+Deregister revisions used by the lab. AWS may retain inactive task-definition metadata; document this accurately rather than claiming physical deletion.
+
+## 8️⃣ Delete ECS Cluster
 
 Only after services/tasks are gone.
 
-## 9. Delete RDS
+## 9️⃣ Delete RDS
 
-Confirm:
+Current DB:
 
 ```text
+madar-p05-postgres
 DeletionProtection = false
 ```
 
-Then delete with no final snapshot:
+Delete with no final snapshot after evidence is complete:
 
 ```bash
-AWS_PAGER="" aws rds delete-db-instance \
-  --region us-east-1 \
-  --db-instance-identifier <db-id> \
-  --skip-final-snapshot
+aws rds delete-db-instance --region us-east-1 --db-instance-identifier madar-p05-postgres --skip-final-snapshot
 ```
 
-Wait until the DB instance disappears from inventory.
+Wait until the instance disappears.
 
-## 10. Delete DB subnet group
+## 🔟 Delete DB Subnet Group
 
-Delete only after the RDS instance is fully removed.
+Delete `madar-p05-db-subnet-group` only after RDS is fully gone.
 
-## 11. Delete temporary Secrets Manager secret
+## 1️⃣1️⃣ Delete Phase 05 Secret
 
-Choose one documented method:
+Secret: `MADAR/Phase05/Postgres`.
 
-- schedule deletion with recovery window, or
-- force immediate deletion for a disposable lab secret when intentionally approved.
+Use a documented deletion method appropriate for a disposable lab. Never expose the secret value while verifying deletion.
 
-Do not print secret values during verification.
+## 1️⃣2️⃣ Delete CloudWatch Log Group
 
-## 12. Delete CloudWatch log group
+Only after required logs/screenshots have been captured.
 
-Only after screenshots/log evidence needed for the portfolio has been captured.
+## 1️⃣3️⃣ Delete ECR Image / Repository
 
-## 13. Delete ECR images/repository
+Default closeout recommendation: remove `madar-phase05-app` because the image is reproducible from source/Dockerfile. If deliberately retained, document the reason and ongoing storage cost.
 
-The default closeout recommendation is to remove the container image and repository because the image is reproducible from Git-tracked source/Dockerfile.
+## 1️⃣4️⃣ Remove IAM Roles / Inline Policies
 
-If deliberately retained, record the ongoing storage reason/cost rather than silently leaving it.
+After ECS no longer references them:
 
-## 14. Delete Phase 05 security groups
+- detach managed execution policies,
+- remove Phase 05 secret-access inline policy,
+- delete the ECS execution role,
+- delete application Task Role if one was created.
 
-Order usually becomes possible after ALB/ECS ENIs/RDS ENIs are gone.
+## 1️⃣5️⃣ Delete Security Groups
 
-Delete custom groups only; never delete the VPC default security group manually.
-
-## 15. Delete subnets / route tables
-
-Delete private/public subnets after dependent ENIs/resources disappear.
-
-Delete custom route tables after subnet associations are removed.
-
-The VPC main route table remains and disappears with the VPC.
-
-## 16. Detach/delete Internet Gateway
-
-```bash
-AWS_PAGER="" aws ec2 detach-internet-gateway \
-  --region us-east-1 \
-  --internet-gateway-id <igw-id> \
-  --vpc-id <vpc-id>
-
-AWS_PAGER="" aws ec2 delete-internet-gateway \
-  --region us-east-1 \
-  --internet-gateway-id <igw-id>
-```
-
-## 17. Delete Phase 05 VPC
-
-```bash
-AWS_PAGER="" aws ec2 delete-vpc \
-  --region us-east-1 \
-  --vpc-id <vpc-id>
-```
-
-Post-delete verification should return no matching VPC or `InvalidVpcID.NotFound` for direct ID lookup.
-
-## 18. Residual-resource audit
-
-Run targeted checks for Phase 05 naming/tag prefix:
-
-```bash
-AWS_PAGER="" aws ecs list-clusters --region us-east-1 --output table
-AWS_PAGER="" aws elbv2 describe-load-balancers --region us-east-1 --output table
-AWS_PAGER="" aws rds describe-db-instances --region us-east-1 --output table
-AWS_PAGER="" aws ec2 describe-addresses --region us-east-1 --output table
-AWS_PAGER="" aws ec2 describe-nat-gateways --region us-east-1 --output table
-AWS_PAGER="" aws ec2 describe-vpcs --region us-east-1 --output table
-AWS_PAGER="" aws ecr describe-repositories --region us-east-1 --output table
-```
-
-Also check:
-
-- Secrets Manager,
-- CloudWatch log groups,
-- ECS task-definition history,
-- ENIs if a VPC deletion is blocked.
-
-## 19. Final cost closeout
-
-Capture:
-
-- month-to-date Usage/Fee,
-- credits,
-- calculated/account net view,
-- final inventory proof.
-
-State clearly that account-level Cost Explorer values may include other MADAR phases unless cost-allocation tags provide a narrower view.
-
-## 20. Retained Phase 03 artifacts
-
-Do **not** automatically delete the Phase 03 AMI/snapshot/S3 as part of this runbook.
-
-After Phase 05 succeeds, make a separate documented decision about whether container/source artifacts have replaced the recovery value of:
+After ALB/ECS/RDS ENIs disappear, delete:
 
 ```text
-ami-0cbd2e9ec0d6f9168
-snap-0920a020c47fb6447
-madar-operational-files-197821101770
+MADAR-P05-ALB-SG
+MADAR-P05-ECS-SG
+MADAR-P05-RDS-SG
+```
+
+Never delete the VPC default security group manually.
+
+## 1️⃣6️⃣ Delete Subnets / Custom Route Tables
+
+Delete all four Phase 05 subnets after dependent ENIs are gone, then delete custom route tables. The VPC main route table disappears with the VPC.
+
+## 1️⃣7️⃣ Detach / Delete IGW
+
+```bash
+aws ec2 detach-internet-gateway --region us-east-1 --internet-gateway-id igw-0df8ed399478fa879 --vpc-id vpc-011a441b0a790c458
+aws ec2 delete-internet-gateway --region us-east-1 --internet-gateway-id igw-0df8ed399478fa879
+```
+
+## 1️⃣8️⃣ Delete Phase 05 VPC
+
+```bash
+aws ec2 delete-vpc --region us-east-1 --vpc-id vpc-011a441b0a790c458
+```
+
+Verification should return no matching VPC or `InvalidVpcID.NotFound` for direct lookup.
+
+## 🔍 19 — Residual Resource Audit
+
+Check at minimum:
+
+```text
+🚀 ECS clusters/services/tasks
+⚖️ ALB/listeners/target groups
+🐘 RDS instances/subnet groups
+🌐 public IPv4 / Elastic IPs
+🚫 NAT gateways (should remain none for Phase 05)
+🏠 Phase 05 VPC/subnets/routes/IGW
+📦 ECR
+🔐 Secrets Manager
+📊 CloudWatch log groups
+🔑 IAM Phase 05 roles/policies
+🧩 ENIs if VPC deletion is blocked
+```
+
+## 💰 20 — Final Cost Closeout
+
+Capture month-to-date usage/fees, credits and final inventory proof. Account Cost Explorer may include other MADAR phases unless cost-allocation tags provide a narrower view.
+
+## 🧬 21 — Phase 03 Retained Assets
+
+🚫 **Do not automatically delete**:
+
+```text
+AMI       ami-0cbd2e9ec0d6f9168
+Snapshot  snap-0920a020c47fb6447
+S3        madar-operational-files-197821101770
+```
+
+After Phase 05 succeeds, make a separate documented decision about whether source/container artifacts have replaced the recovery value of the retained AMI/snapshot.
+
+## 🏁 Cleanup Definition of Done
+
+```text
+No running Fargate tasks         ✅ required
+No Phase 05 ALB                  ✅ required
+No Phase 05 RDS                  ✅ required
+No Phase 05 public IPv4          ✅ required
+No Phase 05 secret/log surprise  ✅ required
+No Phase 05 VPC                  ✅ required
+No forgotten IAM role            ✅ required
+Final cost checkpoint            ✅ required
+Residual audit                   ✅ required
 ```
