@@ -1,70 +1,67 @@
 # 🎯 Repository Scope — MADAR Phase 05
 
-This repository is the implementation and evidence record for **MADAR Phase 05 — Application Modernization with Containers**.
+> 🟢 **Scope delivered and closed.** This repository is both a portfolio artifact and a reproducible engineering record.
 
-## 🚀 In Scope
+## 🚀 Delivered in Scope
 
-- 🔎 recover the existing MADAR Flask application from the retained Phase 03 AMI,
-- 🧹 remove VM-specific runtime assumptions,
-- 🐳 containerize with Docker + Gunicorn + non-root execution,
-- 📦 publish versioned application/restore images to Amazon ECR,
-- 🚀 run the application using Amazon ECS on AWS Fargate,
-- ⚖️ place an Application Load Balancer in front of the ECS service,
-- 🐘 use a private Amazon RDS PostgreSQL data layer,
-- 🗃️ recover the legacy PostgreSQL dump from retained Phase 03 artifacts when required for continuity,
-- ♻️ restore that dump through a controlled one-off Fargate task,
-- 🔐 externalize database credentials with Secrets Manager,
-- 🛡️ enforce `Internet → ALB → ECS → RDS` security-group boundaries,
-- 📊 capture useful CloudWatch/ECS/ALB/RDS observability,
-- ♻️ validate task replacement/self-healing,
-- 📈 validate controlled target-tracking scale-out,
-- 🔌 validate database dependency failure and recovery,
-- 💰 capture cost evidence,
-- 🧹 remove temporary AWS resources and prove residual cleanup.
+- ✅ recovered the legacy Flask application from the retained Phase 03 AMI;
+- ✅ removed VM-specific DB assumptions and containerized with Docker/Gunicorn/non-root execution;
+- ✅ published versioned images to ECR during the lab;
+- ✅ deployed on ECS Fargate behind an ALB;
+- ✅ used private RDS PostgreSQL and Secrets Manager;
+- ✅ recovered the authoritative DB dump from the retained snapshot and restored it through a one-off Fargate task;
+- ✅ enforced `Internet → ALB → ECS → RDS` SG boundaries;
+- ✅ captured CloudWatch/ECS/ALB/RDS observability;
+- ✅ proved task self-healing and automatic scale-out;
+- ✅ injected/recovered an RDS dependency failure;
+- ✅ captured cost evidence;
+- ✅ destroyed temporary Phase 05 infrastructure and proved residual cleanup.
 
-## 🚫 Explicitly Out of Scope
+## 🚫 Deliberately Not Implemented
 
-- ☸️ EKS / Kubernetes,
-- 🐘 production-grade Multi-AZ RDS,
-- 💸 NAT Gateway for the short-lived lab,
-- 🔒 full private Fargate + VPC endpoint production networking,
-- 🧱 WAF,
-- 🌐 Route 53/custom domain purchase,
-- 🔏 mandatory HTTPS for this temporary lab,
-- 🏗️ Terraform/IaC,
-- 🔁 CI/CD/GitHub Actions deployment automation,
-- 🧩 application rewrite or microservice decomposition.
+| Production capability | Why it was not Phase 05 |
+|---|---|
+| ☸️ EKS/Kubernetes | Runtime modernization was proven with ECS/Fargate; Kubernetes belongs in a dedicated phase. |
+| 🐘 Multi-AZ encrypted RDS + production backups | Short-lived synthetic-data lab and strict cost control. |
+| 💸 NAT Gateway | Avoided recurring NAT cost for a short validation window. |
+| 🔒 Private Fargate + VPC endpoints | More production-like, but adds endpoint/network cost and complexity outside the learning objective. |
+| 🔏 HTTPS/ACM + Route 53/domain | No owned production domain was required for the disposable lab. |
+| 🧱 WAF | Edge hardening reserved for security-focused work. |
+| 🏗️ Terraform/IaC | Intentionally deferred so this phase demonstrated the underlying services and runtime behavior directly. |
+| 🔁 CI/CD | Intentionally deferred to a delivery-automation phase. |
+| 👤 Least-privilege PostgreSQL app user | Lab used the restored/admin path; production should create a restricted app role. |
+| 📣 Production alerting | Metrics/logs were proven; full alarm routing/on-call workflow was outside scope. |
 
-These exclusions are deliberate: **Phase 05 demonstrates runtime modernization and container operations.** Delivery automation and broader platform engineering belong in later dedicated phases.
-
-## 🧠 Lab vs Production
+## 🧪 Lab vs Production
 
 ```text
-🧪 LAB
-Public Fargate ENIs + strict SG ingress
-HTTP ALB listener
-Single-AZ temporary RDS
-No NAT Gateway
-Temporary restore container/task
-
-🏭 PRODUCTION EXTENSION
-Private Fargate tasks
-Controlled egress / VPC endpoints as appropriate
-HTTPS + ACM
-Encrypted / highly available database design
-Least-privilege application DB user
-IaC + CI/CD
+🧪 PHASE 05 LAB                       🏭 PRODUCTION EVOLUTION
+Public-IP Fargate + strict SG         Private tasks + controlled egress
+HTTP :80                              HTTPS :443 + ACM + redirect
+Single-AZ temporary RDS               Multi-AZ + encryption + backups
+Manual AWS CLI build                  IaC + reviewed change workflow
+Manual image/deploy steps             CI/CD + approvals + rollback
+Master-user DB path                   Least-privilege app DB role
+Evidence-driven testing               Automated tests + alerts/SLOs
 ```
+
+## 🛡️ Claim Boundaries
+
+- Automatic **scale-out** is proven; separate automatic scale-in is not claimed.
+- During DB failure injection, the externally observed readiness response was **502 through ALB**; documentation preserves that observation.
+- Cost screenshots are checkpoints because Cost Explorer can lag.
+- Cleaned-up AWS resources are historical architecture, not currently running infrastructure.
 
 ## 📚 Source-of-Truth Hierarchy
 
-1. 📍 `CURRENT-STATE.md` — what is actually true now.
-2. 🚀 `README.md` — portfolio-facing architecture/story/progress.
-3. 📋 `docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md` — approved architecture plus execution status.
-4. 🧰 `runbooks/` — operational procedures.
-5. 📸 `evidence/` — proof supporting project claims.
-6. 🧠 `decisions/` — architecture trade-offs.
+1. 📍 `CURRENT-STATE.md` — final state.
+2. 🚀 `README.md` — reviewer-facing story.
+3. 📋 `docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md` — design + executed status.
+4. 🧰 `runbooks/` — independent rebuild/cleanup instructions.
+5. 📸 `evidence/` — proof.
+6. 🧠 `decisions/` — architectural reasoning.
+7. ✅ `checklists/` — gate completion.
 
-## 🛡️ Claim Rule
+## 🔗 Continuity Rule
 
-No document may claim a validation gate is complete until execution actually occurred. Planned production improvements remain recommendations, not deployed controls. Observed results are recorded exactly: automatic scale-out is proven; separate automatic scale-in is not claimed, and the RDS failure test records the observed ALB-facing `502` rather than rewriting it to the application's intended internal `503`.
+Phase 05 cleanup must never be confused with deletion of the retained Phase 03 AMI, snapshot and S3 bucket. Those assets intentionally bridge MADAR into later phases.
