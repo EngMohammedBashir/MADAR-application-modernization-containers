@@ -1,186 +1,102 @@
 # 📸 Phase 05 — Evidence Index
 
-> 🟢 **Live evidence repository.** Screenshots are captured only at meaningful engineering milestones. Never commit passwords, access keys, tokens, secret values, private keys or sensitive console output.
+> 🟢 Screenshots are kept in this single `evidence/` directory and are included only when they support an engineering claim. No passwords, access keys, tokens, private keys or secret values belong here.
 
-## 🗂️ Current Evidence
-
-All screenshots currently live in this single `evidence/` directory. They are indexed here by engineering stage so the repository stays easy to review even without nested folders.
-
-### 🔎 01 — Legacy Recovery
+## 🔎 Legacy Recovery
 
 | File | Proof |
 |---|---|
-| `recovery-ec2-legacy-app-discovered.png` | 🔎 Retained Phase 03 AMI successfully recovered and the existing Flask workload identified |
-| `recovery-resources-cleaned-up.png` | 🧹 Temporary recovery EC2/EBS/security group cleanup verified |
+| `recovery-ec2-legacy-app-discovered.png` | Retained Phase 03 AMI recovered and Flask workload identified |
+| `recovery-resources-cleaned-up.png` | Temporary recovery EC2/EBS/SG cleanup verified |
+| `legacy-database-dump-recovered.png` | Authoritative PostgreSQL custom dump recovered from retained Phase 03 snapshot |
 
-### 🐳 02 — Containerization
-
-| File | Proof |
-|---|---|
-| `docker-build-success.png` | 🏗️ Docker image built successfully |
-| `docker-container-health-success.png` | ❤️ Local container started and application health endpoint passed |
-
-Additional validated facts recorded in project docs: Gunicorn runtime, port `8080`, non-root `madar` user and separate liveness/readiness behavior.
-
-### 📦 03 — Amazon ECR
+## 🐳 Containerization & ECR
 
 | File | Proof |
 |---|---|
-| `ecr-image-push-success.png` | 🚀 Docker image push to private ECR succeeded |
-| `ecr-console-v1-verified.png` | 🏷️ `v1` image index/tag/digest visible in ECR |
+| `docker-build-success.png` | Application Docker image built successfully |
+| `docker-container-health-success.png` | Local container and health behavior validated |
+| `ecr-image-push-success.png` | Application image pushed to private ECR |
+| `ecr-console-v1-verified.png` | Application `v1` image verified in ECR |
+| `MADAR-P05-Restore-Image-QA.png` | Temporary DB restore image contains required PostgreSQL/AWS tooling |
+| `MADAR-P05-ECR-Restore-Repository.png` | Restore ECR repository created |
+| `MADAR-P05-Restore-Image-Pushed.png` | Restore image `v1` published successfully |
 
-### 🌐 04 — Networking
-
-| File | Proof |
-|---|---|
-| `public-network-routing-validated.png` | 🌍 Phase 05 VPC public routing, two public subnets and IGW path validated |
-
-Private routing is recorded in `CURRENT-STATE.md`: `Private-A` and `Private-B` use the dedicated private route table with local-only routing and no NAT Gateway.
-
-### 🛡️ 05 — Security
+## 🌐 Networking & Security
 
 | File | Proof |
 |---|---|
-| `security-group-chain-validated.png` | 🛡️ `Internet :80 → ALB-SG → :8080 ECS-SG → :5432 RDS-SG` validated |
+| `public-network-routing-validated.png` | Public subnet/IGW routing validated |
+| `security-group-chain-validated.png` | `Internet :80 → ALB → ECS :8080 → RDS :5432` SG chain validated |
 
-This proves ECS and RDS do not accept direct Internet ingress.
+## 🚀 Fargate / Database / ALB
 
----
+| File | Proof |
+|---|---|
+| `ecs-fargate-task-running.png` | Fargate runtime reached RUNNING and container execution was established |
+| `database-api-validation.png` | DB-backed application path validated through the deployed runtime |
+| `alb-healthy-fargate-target.png` | ALB target registered healthy |
+| `madar-dashboard-on-fargate.png` | MADAR dashboard rendered through the Fargate/ALB deployment |
 
-## 📷 Evidence Still To Capture
+The database restore task exited `0` and CloudWatch recorded `RESTORE COMPLETED SUCCESSFULLY`. A separate DB verification task also exited `0`. Exact row-count output is not claimed unless separately evidenced.
 
-### 🐘 RDS / Secrets
+## ♻️ Reliability / Self-Healing
 
-Capture one clean view proving:
+| File | Proof |
+|---|---|
+| `ecs-two-healthy-fargate-targets.png` | Two healthy service targets established for the HA/failure test |
+| `ecs-task-self-healing.png` | Intentional task stop caused desired/running mismatch and replacement activity |
+| `ecs-self-healing-recovered.png` | ECS returned the service to the desired healthy state |
+
+During the intentional task failure, the application remained available through the surviving target while ECS launched a replacement.
+
+## 📈 Auto Scaling
+
+| File | Proof |
+|---|---|
+| `ecs-auto-scaling-triggered.png` | CloudWatch high alarm triggered the target-tracking policy and ECS desired count moved automatically from 1 to 2 |
+
+For the controlled test only, the CPU target was temporarily lowered from 40% to 5%. CPU crossed the threshold for the required evaluation periods, the alarm entered `ALARM`, and Application Auto Scaling initiated scale-out. The policy was restored to **40%** afterward.
+
+**Claim boundary:** automatic **scale-out** is validated. This repository does not claim a separately evidenced automatic scale-in event.
+
+## 🔌 RDS Dependency Failure & Recovery
+
+| File | Proof |
+|---|---|
+| `rds-dependency-failure.png` | After revoking ECS→RDS TCP/5432, `/api/health` remained `200` while `/api/ready` returned `502` through the ALB |
+| `rds-dependency-recovery.png` | After restoring the SG rule, `/api/health` and `/api/ready` returned `200` |
+
+The observed `502` is recorded exactly as observed; it is not rewritten as the application's intended internal `503` response.
+
+## 📊 Observability
+
+| File | Proof |
+|---|---|
+| `observability-infrastructure-health.png` | ECS service, ALB target health, private/available RDS and CloudWatch log streams viewed together |
+| `observability-cloudwatch-metrics.png` | ECS CPU/memory, ALB request and RDS connection metrics captured from CloudWatch |
+
+## 💰 Cost
+
+| File | Proof |
+|---|---|
+| `phase05-cost-checkpoint.png` | Cost Explorer checkpoint showed negligible/~$0.00 visible usage for the captured period |
+
+Cost Explorer can lag. This screenshot is a checkpoint, not a guarantee that final settled cost is exactly zero.
+
+## ⏳ Evidence Still Required
+
+Only final closeout evidence remains:
 
 ```text
-PostgreSQL available
-PubliclyAccessible = false
-DB subnet group = private subnets
-Single-AZ / db.t4g.micro / 20 GB gp3
-RDS-SG attached
-```
-
-Suggested filename:
-
-`rds-private-postgres-validated.png`
-
-Do **not** reveal the Secrets Manager secret value.
-
-### 🔑 IAM / ECS Task Definition
-
-Capture:
-
-- ECS execution role,
-- task definition CPU/memory,
-- `awsvpc`,
-- ECR `v1` image,
-- `awslogs`,
-- secret injection configuration without values.
-
-Suggested filename:
-
-`ecs-task-definition-security-validated.png`
-
-### 🚀 Initial Fargate Runtime
-
-Capture:
-
-- task `RUNNING`,
-- image pull success,
-- CloudWatch log stream,
-- task networking/security group.
-
-Suggested filename:
-
-`ecs-fargate-task-running.png`
-
-### 🗃️ Database Functionality
-
-Capture a deterministic DB-backed MADAR API response proving Flask → PostgreSQL connectivity.
-
-Suggested filename:
-
-`database-api-validation.png`
-
-### ⚖️ ALB
-
-Capture:
-
-- ALB across both public AZs,
-- target group type `ip`,
-- healthy Fargate target,
-- `/api/health` response through ALB DNS.
-
-Suggested filename:
-
-`alb-healthy-fargate-target.png`
-
-### ♻️ Self-Healing
-
-Capture the sequence:
-
-```text
-2 healthy tasks
-→ intentionally stop one
-→ desired-count mismatch
-→ replacement task starts
-→ target becomes healthy
-→ desired count restored
-```
-
-Suggested filename:
-
-`ecs-task-self-healing.png`
-
-### 📈 Auto Scaling
-
-Capture baseline, target tracking, controlled load, CPU threshold crossing, scale-out and scale-in.
-
-Suggested filename:
-
-`ecs-auto-scaling-validated.png`
-
-### 🔌 Dependency Failure / Recovery
-
-Capture:
-
-```text
-ECS→RDS :5432 allowed  → DB works
-rule revoked           → readiness/DB call fails
-rule restored          → functionality recovers
-```
-
-Suggested filename:
-
-`rds-dependency-failure-recovery.png`
-
-### 📊 Observability
-
-Capture meaningful CloudWatch/ECS/ALB/RDS metrics and logs used during validation.
-
-Suggested filename:
-
-`observability-validation.png`
-
-### 💰🧹 Cost & Cleanup
-
-Final evidence must prove cost checkpoint plus removal of ECS service/tasks, ALB/TG, RDS, secret/log decision, ECR cleanup decision, SGs, subnets/routes/IGW/VPC and residual-resource audit.
-
-Suggested filenames:
-
-```text
-phase05-cost-checkpoint.png
 phase05-final-cleanup.png
 phase05-residual-audit.png
 ```
 
----
+The residual audit must check ECS, ALB/TG, RDS/subnet group, Phase 05 VPC/network resources, ECR, Secrets Manager, CloudWatch Logs, IAM roles and public IPv4/ENIs as applicable.
 
 ## 🧠 Evidence Rule
 
-A screenshot belongs here only if it supports a claim a reviewer would care about:
+A screenshot belongs here only if it supports a reviewer-relevant claim:
 
-**architecture • security • functionality • failure behavior • scaling • observability • cost • cleanup**.
-
-Routine command output does not need a screenshot.
+**architecture • security • functionality • recovery • failure behavior • scaling • observability • cost • cleanup**.
