@@ -1,96 +1,103 @@
-# ✅ Gate 0 — AWS Account, Cost & Retained-Asset Preflight
+# ✅ Phase 05 — End-to-End Checklist
 
-> 🟢 **RESULT: GO — completed 2026-09-03.** Phase 05 implementation was authorized to proceed without an AWS account upgrade.
+> 🟢 **FINAL RESULT: PASS / COMPLETE / CLEANED UP — 2026-09-03**
 
-## 🧾 Verified Account State
+## 🧾 Gate 0 — Account & Cost
+- [x] AWS account state checked.
+- [x] Promotional credits checked (~$174.76 remained at preflight checkpoint).
+- [x] No AWS account upgrade performed.
+- [x] Cost Explorer baseline reviewed.
+- [x] Final available cost closeout captured; billing data may lag.
 
-- [x] Current AWS account/Free Plan state checked.
-- [x] Promotional credit balance checked before build (~$174.76 remained at the checkpoint).
-- [x] Free Plan time remaining checked (165 days at the checkpoint).
-- [x] No account upgrade performed.
-- [x] Required AWS APIs/services used by the selected build path were accessible.
-- [x] Cost Explorer baseline reviewed; September was essentially $0 at the start of Phase 05.
+## 🔗 Retained Continuity Assets
+- [x] AMI `ami-0cbd2e9ec0d6f9168` retained/available.
+- [x] Snapshot `snap-0920a020c47fb6447` retained/completed.
+- [x] S3 `madar-operational-files-197821101770` retained/accessibile.
+- [x] Recovered DB dump stored under `database-backups/madar_legacy_final.dump`.
 
-> 💰 Credits and plan state are time-sensitive account facts. The values above document the execution checkpoint, not a permanent guarantee.
+## 🐳 Application Modernization
+- [x] Legacy Flask source recovered.
+- [x] VM-local DB assumptions externalized with `MADAR_DB_*`.
+- [x] Gunicorn used instead of Flask dev server.
+- [x] Container runs as non-root `madar` user.
+- [x] `/api/health` and `/api/ready` separated.
+- [x] Local health test passed.
+- [x] Local readiness failed without DB as expected.
+- [x] Application image pushed to ECR.
 
-## 🔗 Phase 03 Retained Assets
+## 🌐 AWS Runtime
+- [x] Dedicated `10.60.0.0/16` VPC built.
+- [x] Two public + two private subnets created.
+- [x] SG chain enforced: Internet→ALB→ECS→RDS.
+- [x] Private RDS PostgreSQL created.
+- [x] Secrets Manager used for DB password injection.
+- [x] ECS Fargate task started successfully.
+- [x] ALB target became healthy.
+- [x] Dashboard rendered through ALB.
+- [x] DB-backed readiness returned `200`.
 
-- [x] AMI `ami-0cbd2e9ec0d6f9168` exists and is available.
-- [x] Snapshot `snap-0920a020c47fb6447` exists and is retained.
-- [x] S3 bucket `madar-operational-files-197821101770` exists/reachable.
+## 🗃️ Database Recovery
+- [x] Discovered S3 did not already contain full DB dump.
+- [x] Retained snapshot inspected read-only.
+- [x] Authoritative custom dump recovered.
+- [x] Temporary inspection EC2/EBS/SG deleted.
+- [x] Restore image built and QA-tested.
+- [x] Restore task role limited to exact S3 object.
+- [x] Restore task exited `0`.
+- [x] Verification task exited `0`.
 
-These assets established the continuity path from Phase 03 into the Phase 05 application recovery.
+## ♻️ Reliability & Failure Tests
+- [x] Two healthy Fargate targets established.
+- [x] One task intentionally stopped.
+- [x] ECS replacement/self-healing observed.
+- [x] Application remained available during task replacement.
+- [x] CPU target tracking configured.
+- [x] Automatic scale-out `1 → 2` proven under controlled load.
+- [ ] Automatic scale-in separately evidenced — **not claimed**.
+- [x] ECS→RDS `5432` deliberately revoked.
+- [x] During failure: health `200`, readiness `502` observed through ALB.
+- [x] SG rule restored and readiness returned `200`.
 
-## 🧹 Phase 04 Cleanup
+## 📊 Observability & Evidence
+- [x] ECS state/CPU/memory captured.
+- [x] ALB target/request evidence captured.
+- [x] RDS state/connections captured.
+- [x] CloudWatch logs captured.
+- [x] Cost checkpoint captured.
+- [x] Final residual audit captured.
+- [x] Cost closeout captured.
 
-- [x] Phase 04 cloud resources previously cleaned up.
-- [x] No Phase 04 WorkSpace/AD Connector was required by Phase 05.
+## 🧹 Cleanup
+- [x] Auto Scaling policy/scalable target removed.
+- [x] ECS service/tasks removed.
+- [x] ALB/TG removed.
+- [x] Task definitions deregistered.
+- [x] ECS cluster `INACTIVE`/removed from active runtime.
+- [x] RDS + DB subnet group removed.
+- [x] Phase 05 secret deleted/forced deletion initiated.
+- [x] CloudWatch log group removed.
+- [x] Both Phase 05 ECR repositories removed.
+- [x] Phase 05 IAM roles/policies removed.
+- [x] Three custom SGs removed.
+- [x] Four subnets removed.
+- [x] Two custom route tables removed.
+- [x] IGW removed.
+- [x] Phase 05 VPC removed.
+- [x] Residual audit clean.
+- [x] Phase 03 retained assets verified after cleanup.
 
-## ☁️ Service/API Access
+## 🏭 Production Gaps — Deliberate
+- [ ] Private Fargate + controlled egress/VPC endpoints.
+- [ ] HTTPS/ACM + owned DNS.
+- [ ] Multi-AZ encrypted RDS + production backup policy.
+- [ ] Least-privilege DB application user.
+- [ ] WAF/security hardening.
+- [ ] Terraform/IaC.
+- [ ] CI/CD/deployment approvals/rollback.
+- [ ] Production alerting.
 
-Execution subsequently proved access to the services required by the current build:
+> These unchecked items are **not unfinished Phase 05 work**. They were deliberately excluded by scope, cost/account constraints, or reserved for later MADAR phases.
 
-- [x] EC2 / VPC
-- [x] ECR
-- [x] RDS PostgreSQL
-- [x] Secrets Manager
-- [x] IAM
-- [ ] ECS/Fargate runtime deployment — API/runtime validation pending
-- [ ] ELB/ALB creation — pending later gate
-- [ ] CloudWatch application logs — pending ECS runtime
+# 🏁 Definition of Done
 
-## 🐘 Regional Capability Proven
-
-- [x] `db.t4g.micro` PostgreSQL successfully created in `us-east-1`.
-- [x] PostgreSQL engine provisioned successfully.
-- [x] Two AZs (`us-east-1a`, `us-east-1b`) used for Phase 05 subnet foundation.
-- [ ] Fargate `256 CPU / 512 MiB` runtime validation pending task deployment.
-
-## 💰 Cost Guardrails
-
-Cost-bearing resources are intentionally short-lived.
-
-```text
-🐘 RDS       → currently running during build window
-⚖️ ALB       → create as late as practical
-🚀 Fargate   → baseline desired count 1
-🌐 IPv4      → only while required by running Fargate tasks
-🔐 Secrets   → Phase 05 scoped
-📦 ECR       → one small versioned application image
-🚫 NAT       → intentionally excluded
-```
-
-The lab will not be considered complete until cost evidence and a residual-resource audit are captured after cleanup.
-
-## 🟢 GO / NO-GO Record
-
-```text
-Account / plan checked      : PASS
-Credits checked             : PASS
-No account upgrade          : PASS
-AMI available               : PASS
-Snapshot available          : PASS
-S3 available                : PASS
-Required API access         : PASS for executed foundation services
-Two-AZ network capability   : PASS
-RDS db.t4g.micro            : PASS
-Cost-conscious design       : PASS
-
-FINAL GATE 0                : GO ✅
-```
-
-## ▶️ Outcome
-
-Gate 0 is no longer the next action. Implementation proceeded through:
-
-```text
-🔎 AMI recovery
-→ 🐳 containerization
-→ 📦 ECR
-→ 🌐 network/security
-→ 🐘 RDS
-→ 🔐 Secrets Manager
-→ 🔑 IAM foundation (current)
-```
-
-See `../CURRENT-STATE.md` for the live project checkpoint.
+**ALL PHASE 05 REQUIRED GATES: ✅ COMPLETE**
