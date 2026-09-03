@@ -1,41 +1,36 @@
 # 🔐 ADR-002 — HTTP for Temporary Lab, TLS for Production
 
-**Status:** ✅ Accepted for Phase 05 lab  
-**Decision date:** 2026-08-27
+**Status:** ✅ Accepted → Executed → Endpoint destroyed  
+**Decision date:** 2026-08-27 · **Outcome recorded:** 2026-09-03
 
 ## 🎯 Context
 
-A production Internet-facing application should normally terminate TLS at the load balancer using a validated certificate and owned domain. Phase 05 is a short-lived portfolio lab that uses synthetic data and will be destroyed after evidence capture.
+A real Internet-facing production application should terminate TLS with a validated certificate and owned DNS. Phase 05 was a short-lived synthetic-data lab whose goal was container runtime modernization and operational testing.
 
 ## ✅ Decision
 
-Use an ALB HTTP listener on port `80` for temporary validation.
+I used an ALB listener on HTTP `:80` only for temporary validation. I did not purchase/configure a domain solely to make the disposable lab look more production-like.
 
-🚫 Do not purchase/configure Route 53 and a custom domain solely to make the temporary lab look more production-like.
+## 🧪 Outcome
+
+The HTTP endpoint was sufficient to validate ALB→Fargate routing, health/readiness, dashboard behavior, task self-healing, scaling and DB dependency failure/recovery. After evidence capture, the ALB and Phase 05 network were deleted.
 
 ## 🏭 Production Requirement
 
-A production version would use:
-
 ```text
-🌐 Route 53 / owned DNS
+🌐 Owned DNS / Route 53
         ↓
 🔏 ACM certificate
         ↓
 ⚖️ ALB HTTPS :443
-        ↓
+        ↑
 ↪️ HTTP :80 → redirect to HTTPS
 ```
 
-## 💡 Why
+Production should also add appropriate security headers, edge controls/WAF where justified, monitoring and certificate lifecycle management.
 
-- 🐳 application modernization is the Phase 05 learning objective,
-- 🧪 the lab handles synthetic data only,
-- ⏱️ resources are intentionally short lived,
-- 📚 documentation explicitly records the security difference rather than presenting HTTP as production-ready.
+## ⚠️ Claim Boundary
 
-## ⚠️ Consequence
+No Phase 05 screenshot or document should describe HTTP `:80` as production-ready security. It was a bounded lab decision, not a recommended steady state.
 
-Screenshots/evidence must not imply the temporary HTTP endpoint represents a production security posture.
-
-> 🧠 **Portfolio takeaway:** security trade-offs are acceptable only when they are intentional, bounded, documented and paired with the correct production recommendation.
+> 🧠 **What I learned:** a portfolio project is stronger when it states what was deliberately *not* built and explains the production replacement.
