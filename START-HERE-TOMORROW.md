@@ -1,156 +1,107 @@
-# 🚦 START HERE — Phase 05 Day One
+# 🧭 START / RESUME HERE — MADAR Phase 05
 
-Do **not** create a VPC, RDS, ALB or ECS service first.
+> 🟡 **LIVE CHECKPOINT — 2026-09-03**  
+> This file originally described Day One. Gate 0 and the early implementation gates are now complete, so it now serves as the safest resume point for the next session.
 
-Tomorrow starts with one goal:
-
-> Prove the account and retained Phase 03 artifacts are ready before spending anything on Phase 05.
-
-## Step 1 — Open AWS CloudShell in `us-east-1`
-
-Confirm identity/region:
-
-```bash
-aws sts get-caller-identity
-aws configure get region
-```
-
-If no default region is set, commands in this runbook explicitly use `us-east-1`.
-
-## Step 2 — Run the retained-asset audit
-
-### AMI
-
-```bash
-AWS_PAGER="" aws ec2 describe-images \
-  --region us-east-1 \
-  --image-ids ami-0cbd2e9ec0d6f9168 \
-  --query 'Images[0].{ImageId:ImageId,Name:Name,State:State,Architecture:Architecture,RootDeviceName:RootDeviceName}' \
-  --output table
-```
-
-### Snapshot
-
-```bash
-AWS_PAGER="" aws ec2 describe-snapshots \
-  --region us-east-1 \
-  --snapshot-ids snap-0920a020c47fb6447 \
-  --query 'Snapshots[0].{SnapshotId:SnapshotId,State:State,VolumeSize:VolumeSize,Encrypted:Encrypted}' \
-  --output table
-```
-
-### S3
-
-```bash
-AWS_PAGER="" aws s3 ls \
-  s3://madar-operational-files-197821101770/operational-data/ \
-  --recursive
-```
-
-Expected checkpoint:
+## ✅ Already Completed
 
 ```text
-AMI       available
-Snapshot  completed
-S3        reachable / expected objects visible
+🧾 Gate 0 account/cost/artifact preflight       ✅
+🔎 Retained AMI recovery                        ✅
+🧹 Temporary recovery EC2/EBS/SG cleanup        ✅
+🐳 Flask modernization + Docker build           ✅
+❤️ Local container validation                   ✅
+📦 ECR repository + v1 push                     ✅
+🌐 VPC + 4 subnets + IGW + route tables         ✅
+🛡️ ALB/ECS/RDS security-group chain             ✅
+🐘 Private RDS PostgreSQL                       ✅ available
+🔐 Secrets Manager DB connection secret         ✅
+🔑 ECS Execution Role trust relationship        ✅
 ```
 
-## Step 3 — Reconfirm Phase 04 cleanup
+## 📍 Resume Exactly Here
 
-```bash
-AWS_PAGER="" aws workspaces describe-workspaces \
-  --region us-east-1 \
-  --query 'Workspaces[*].[WorkspaceId,UserName,State]' \
-  --output table
-
-AWS_PAGER="" aws ds describe-directories \
-  --region us-east-1 \
-  --query 'DirectoryDescriptions[*].[DirectoryId,Name,Type,Stage]' \
-  --output table
-```
-
-Expected: no Phase 04 WorkSpace or directory.
-
-## Step 4 — Read-only service access smoke test
-
-```bash
-AWS_PAGER="" aws ecs list-clusters --region us-east-1 --output table
-AWS_PAGER="" aws ecr describe-repositories --region us-east-1 --output table
-AWS_PAGER="" aws elbv2 describe-load-balancers --region us-east-1 --output table
-AWS_PAGER="" aws rds describe-db-instances --region us-east-1 --output table
-AWS_PAGER="" aws secretsmanager list-secrets --region us-east-1 --max-results 5 --output table
-```
-
-We are looking for successful API access — not for existing Phase 05 resources.
-
-## Step 5 — Billing / credit checkpoint
-
-From Billing & Cost Management verify:
+Current role:
 
 ```text
-Current account plan
-Free Plan remaining time (if applicable)
-Credit balance
-Credit expiration
+MADAR-P05-ECS-ExecutionRole
+Trust principal: ecs-tasks.amazonaws.com
 ```
 
-Then capture current Cost Explorer baseline.
+### ▶️ Next action
 
-Do not assume promotional credits automatically prove a service is available to the account.
+Attach the standard ECS task execution managed policy, then add narrowly scoped Secrets Manager access for the Phase 05 PostgreSQL secret.
 
-## Step 6 — Budget
-
-Before RDS/ALB/Fargate creation:
+After IAM:
 
 ```text
-Warning budget     $3
-Secondary warning  $5
-```
-
-Confirm notification delivery.
-
-## Step 7 — GO / NO-GO
-
-Record:
-
-```text
-AMI                PASS / FAIL
-Snapshot           PASS / FAIL
-S3                 PASS / FAIL
-Phase04 cleanup    PASS / FAIL
-ECS API            PASS / FAIL
-ECR API            PASS / FAIL
-ELB API            PASS / FAIL
-RDS API            PASS / FAIL
-Secrets API        PASS / FAIL
-Credits checked    PASS / FAIL
-Budget ready       PASS / FAIL
-
-GATE 0             GO / NO-GO
-```
-
-### If GO
-
-The first cost-bearing engineering action is **not RDS**.
-
-Next:
-
-```text
-Launch temporary EC2 from retained AMI
+🔑 IAM execution permissions
       ↓
-Find existing Flask application
+📊 CloudWatch log group
       ↓
-Inspect runtime/config/dependencies
+🚀 ECS cluster
       ↓
-Extract safe source
+📋 Task definition
       ↓
-Terminate temporary EC2
+🏃 Initial Fargate task
+      ↓
+🐘 Verify task → RDS
+      ↓
+⚖️ Target group + ALB + ECS service
 ```
 
-Then containerization happens locally before the ECS/RDS/ALB environment exists.
+## 🔒 Live Architecture IDs
 
-### If NO-GO
+```text
+VPC        vpc-011a441b0a790c458
+Public-A   subnet-024a57f44c014ab2a
+Public-B   subnet-0726ef657d0ab0ca5
+Private-A  subnet-0ba1f1f304eec85cb
+Private-B  subnet-0395c2043842856ce
+IGW        igw-0df8ed399478fa879
+Public RT  rtb-076fdacedac35cd66
+Private RT rtb-0ed3daeca13e9987e
+ALB-SG     sg-00b9b70e13293ff46
+ECS-SG     sg-0d13f6af551e284c8
+RDS-SG     sg-00ae439cb916d164b
+```
 
-Stop. Document the exact account/service restriction before changing architecture.
+## 🐘 Live Database
 
-Do not improvise an upgrade or substitute service in the middle of the build.
+```text
+DB ID       madar-p05-postgres
+DB name     madar_legacy
+Engine      PostgreSQL 18.3
+Class       db.t4g.micro
+Public      false
+AZ          us-east-1a
+Secret      MADAR/Phase05/Postgres
+```
+
+Never print or commit the secret value.
+
+## 📦 Container Artifact
+
+```text
+ECR repository  madar-phase05-app
+Tag             v1
+Digest          sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
+App port        8080
+Health          /api/health
+Readiness       /api/ready
+```
+
+## 💰 Cost Reminder
+
+🐘 RDS is currently a live cost clock. Keep the implementation moving and delete it after all required evidence/testing.  
+🚫 Do not add NAT Gateway.  
+🚫 Do not upgrade the AWS account for this phase.  
+⚖️ Create ALB only when the ECS runtime is ready to register targets.
+
+## 📸 Next Meaningful Evidence
+
+Do not screenshot routine IAM commands. The next strong portfolio evidence should prove the ECS task definition/runtime security configuration and then a `RUNNING` Fargate task with logs.
+
+## 🧹 Do Not Forget
+
+Phase 05 is not finished until the failure/scaling tests, cost checkpoint, destructive cleanup and residual-resource audit are complete.
