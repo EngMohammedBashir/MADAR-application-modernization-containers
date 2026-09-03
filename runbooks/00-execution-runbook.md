@@ -1,148 +1,183 @@
-# 🧰 Phase 05 — Execution Runbook
+# 🧰 Phase 05 — Rebuild / Execution Runbook
 
-> 📍 **Checkpoint: 2026-09-03 — execution/validation complete; cleanup next.**  
-> This runbook records what was actually executed. Secret values must never be printed or committed.
+> 🟢 **Historical execution: COMPLETE.** This runbook is written so I—or another engineer—can understand and rebuild the lab without needing the original chat.  
+> 🔐 Never print or commit passwords, secret values, access keys or private keys.
 
-## 🟢 Gate 0 — Preflight
-
-**COMPLETE / GO** ✅ — account/credits and retained Phase 03 artifacts verified. No AWS account upgrade performed.
-
-## 🟢 Gate 1 — Recover Legacy Application
-
-**COMPLETE** ✅
-
-Source AMI: `ami-0cbd2e9ec0d6f9168`. Flask workload recovered from `/home/madaradmin/madar-legacy-app`, extracted safely, and temporary recovery EC2/EBS/SG removed.
-
-## 🟢 Gate 2 — Containerize Locally
-
-**COMPLETE** ✅
+## 🧠 Mental Model
 
 ```text
-Base       python:3.12-slim
-Runtime    gunicorn / 2 workers
-Bind       0.0.0.0:8080
-User       madar / UID 1000
-health     200 locally
-ready      503 locally without PostgreSQL — expected
+Legacy VM artifact → recover source → container → registry → Fargate → ALB
+                                      ↓                     ↓
+                                external config          private RDS
 ```
 
-Database configuration externalized through `MADAR_DB_HOST`, `MADAR_DB_PORT`, `MADAR_DB_NAME`, `MADAR_DB_USER`, `MADAR_DB_PASSWORD`.
+## 0️⃣ Preflight
 
-## 🟢 Gate 3 — Application ECR
+Verify identity/region and retained assets before spending money.
 
-**COMPLETE** ✅
+```powershell
+aws sts get-caller-identity
+aws configure get region
+aws ec2 describe-images --image-ids ami-0cbd2e9ec0d6f9168 --region us-east-1
+aws ec2 describe-snapshots --snapshot-ids snap-0920a020c47fb6447 --region us-east-1
+aws s3api head-bucket --bucket madar-operational-files-197821101770
+```
+
+**Why:** prove I am operating in the intended account/region and that continuity artifacts exist. **Expected:** AMI `available`, snapshot `completed`, S3 accessible.
+
+## 1️⃣ Recover the Application
+
+Launch a temporary recovery EC2 from the retained AMI only long enough to inspect `/home/madaradmin/madar-legacy-app` and copy the required source. Imported VM images may preserve guest SSH configuration instead of behaving like a native cloud image; do not assume a newly selected EC2 key will work.
+
+I recovered `app.py`, templates, static assets and required scripts, then deleted the temporary EC2/EBS/SG.
+
+## 2️⃣ Modernize the Runtime
+
+The application must not depend on `localhost` PostgreSQL or embedded credentials. Use environment variables:
 
 ```text
-Repository  madar-phase05-app
-Tag         v1
-Digest      sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
+MADAR_DB_HOST
+MADAR_DB_PORT
+MADAR_DB_NAME
+MADAR_DB_USER
+MADAR_DB_PASSWORD
 ```
 
-## 🟢 Gate 4 — Network / RDS / Secrets / IAM
+Container standard:
 
-**COMPLETE** ✅
+```dockerfile
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt && useradd --create-home --shell /usr/sbin/nologin madar
+COPY app.py .
+COPY templates ./templates
+COPY static ./static
+RUN chown -R madar:madar /app
+USER madar
+EXPOSE 8080
+CMD ["gunicorn","--bind","0.0.0.0:8080","--workers","2","--access-logfile","-","--error-logfile","-","app:app"]
+```
 
-VPC `10.60.0.0/16`, two public and two private subnets, IGW/public routing, local-only private routing, no NAT Gateway.
+Build/test:
 
-Security chain:
+```powershell
+docker build -t madar-phase05-app:local .
+docker run -d --name madar-app -p 8080:8080 -e MADAR_DB_PASSWORD=local-test-only madar-phase05-app:local
+curl.exe -i http://localhost:8080/api/health
+curl.exe -i http://localhost:8080/api/ready
+docker exec madar-app id
+```
+
+**Expected:** health `200`; readiness can fail locally because no PostgreSQL is present; `id` must show non-root `madar`.
+
+## 3️⃣ Publish Application Image
+
+```powershell
+aws ecr create-repository --repository-name madar-phase05-app --image-scanning-configuration scanOnPush=true --region us-east-1
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 197821101770.dkr.ecr.us-east-1.amazonaws.com
+docker tag madar-phase05-app:local 197821101770.dkr.ecr.us-east-1.amazonaws.com/madar-phase05-app:v1
+docker push 197821101770.dkr.ecr.us-east-1.amazonaws.com/madar-phase05-app:v1
+```
+
+**Why:** Fargate pulls an immutable deployment artifact from ECR rather than from my workstation.
+
+## 4️⃣ Build Network + Security
+
+Create dedicated VPC `10.60.0.0/16`, two public and two private subnets across `us-east-1a/b`, IGW/public routing and local-only private routing. No NAT was used in this lab.
+
+Security rule chain:
 
 ```text
-0.0.0.0/0 → ALB-SG :80
-ALB-SG     → ECS-SG :8080
-ECS-SG     → RDS-SG :5432
+Internet 0.0.0.0/0 → ALB-SG TCP/80
+ALB-SG              → ECS-SG TCP/8080
+ECS-SG              → RDS-SG TCP/5432
 ```
 
-RDS `madar-p05-postgres`: PostgreSQL 18.3, db.t4g.micro, 20 GB gp3, Single-AZ, private. Secrets Manager name: `MADAR/Phase05/Postgres`.
+**Rule:** do not add `0.0.0.0/0` to ECS `8080` or RDS `5432`.
 
-Execution role `MADAR-P05-ECS-ExecutionRole` configured for ECS execution plus narrowly scoped secret access. CloudWatch log group `/ecs/madar-phase05-app` created with 7-day retention.
+## 5️⃣ Create RDS + Secret
 
-## 🟢 Gate 5 — Recover / Restore Legacy Database
+Create private PostgreSQL RDS in the two private subnets. Lab configuration was `db.t4g.micro`, 20 GiB gp3, Single-AZ, `PubliclyAccessible=false`.
 
-**COMPLETE** ✅
-
-S3 did not already contain a full database dump. The retained Phase 03 snapshot was attached to temporary inspection infrastructure and mounted read-only. The newer authoritative PostgreSQL custom dump was recovered and copied to:
-
-`s3://madar-operational-files-197821101770/database-backups/madar_legacy_final.dump`
-
-Temporary inspection resources were then removed:
+Store DB connection JSON in Secrets Manager. Verify **keys**, never the secret value:
 
 ```text
-EC2  i-008ab8e6f83b405c8     terminated
-EBS  vol-0717e3317fe26639e   deleted
-SG   sg-07a6ab691556e32a5    deleted
+username / password / host / port / dbname
 ```
 
-A dedicated restore image `madar-p05-restore:v1` was built/published. `MADAR-P05-Restore-TaskRole` received only `s3:GetObject` for the exact dump object.
+⚠️ **Actual error:** my first Fargate task failed because the secret JSON was malformed. I corrected the JSON structure, verified key names safely, and the next task started.
 
-Restore task `5614c8240a514ba8a25b6ed6c281cd36` exited `0`; logs recorded `RESTORE COMPLETED SUCCESSFULLY`. Verification task `fe9e80d5004d4f4a8f9e0638037bda55` also exited `0`.
+## 6️⃣ Recover and Restore Legacy DB
 
-## 🟢 Gate 6 — ECS / Fargate / ALB
-
-**COMPLETE** ✅
+S3 did not contain the full dump. I mounted a temporary EBS volume created from retained snapshot `snap-0920a020c47fb6447` read-only and found the authoritative custom dump. I copied it to:
 
 ```text
-Cluster       MADAR-P05-Cluster
-Task def      madar-phase05-app:1
-Service       MADAR-P05-App-Service
-ALB           MADAR-P05-ALB
-Target group  MADAR-P05-TG / type ip / port 8080
-Health path   /api/health
+s3://madar-operational-files-197821101770/database-backups/madar_legacy_final.dump
 ```
 
-Validated through ALB:
+A dedicated restore task role had only:
 
 ```text
-/api/health  200
-/api/ready   200 / database connected
-Dashboard    rendered successfully
+s3:GetObject → arn:aws:s3:::madar-operational-files-197821101770/database-backups/madar_legacy_final.dump
 ```
 
-## 🟢 Gate 7 — Reliability / Scaling / Failure
+The restore container used `aws s3 cp` + `pg_restore --no-owner --no-acl --exit-on-error`. Restore task exited `0` and logged `RESTORE COMPLETED SUCCESSFULLY`.
 
-**COMPLETE** ✅
+## 7️⃣ ECS Task + ALB + Service
 
-### ♻️ Self-healing
+Register Fargate task definition with `awsvpc`, CPU `256`, memory `512`, image `:v1`, container port `8080`, CloudWatch logs and secret injection. Place tasks in public subnets with public IPv4 **only because this lab intentionally avoided NAT**; ECS-SG still accepts app ingress only from ALB-SG.
 
-Desired count was raised to 2. Two targets became healthy. One service task was intentionally stopped; ECS started a replacement, ALB drained the old target, and the application remained available. Service returned to desired healthy capacity.
+Create target group `ip:8080`, health path `/api/health`, Internet-facing ALB on public A/B, listener `HTTP:80`, then ECS service attached to TG.
 
-### 📈 Auto Scaling
+Validate:
 
-Application Auto Scaling configured `Min=1`, `Max=2`, CPU target tracking. For controlled proof the target was temporarily lowered from 40% to 5%. Load produced threshold-crossing datapoints; the high alarm entered `ALARM`, target tracking triggered, and ECS desired count changed automatically from 1 to 2. Target was restored to 40% after the test.
+```powershell
+curl.exe -i http://<ALB-DNS>/api/health
+curl.exe -i http://<ALB-DNS>/api/ready
+```
 
-Only automatic scale-out is claimed as proven.
+**Expected:** both `200` with DB connected on readiness.
 
-### 🔌 RDS dependency failure/recovery
+## 8️⃣ Self-Healing Test
 
-The exact RDS SG ingress rule allowing ECS-SG TCP/5432 was revoked temporarily.
+Set desired count to `2`, wait for two healthy targets, intentionally stop one service task, then observe ECS replace it while ALB drains the old target.
 
-Observed through ALB:
+**Proof required:** desired/running mismatch during failure + replacement task + two healthy targets after recovery.
+
+## 9️⃣ Target-Tracking Scale-Out
+
+Register ECS scalable target `Min=1 Max=2` and CPU target tracking. Intended target was `40%`. For controlled proof I temporarily used `5%`, generated load, observed CloudWatch ALARM and automatic desired count `1→2`, then restored `40%`.
+
+⚠️ Do not claim scale-in unless separately evidenced.
+
+## 🔟 DB Dependency Failure
+
+Temporarily revoke only the ECS-SG→RDS-SG TCP/5432 ingress rule. Observe through ALB, then immediately restore the exact rule.
+
+Observed:
 
 ```text
-failure: /api/health = 200
-failure: /api/ready  = 502
-recovery: /api/health = 200
-recovery: /api/ready  = 200
+failure  health=200 / ready=502
+recovery health=200 / ready=200
 ```
 
-The rule was restored immediately. Current replacement rule ID is `sgr-0eb29e1e3032db334`.
+## 1️⃣1️⃣ Observability
 
-## 🟢 Gate 8 — Observability / Cost
+Capture ECS desired/running/pending, target health, RDS status/private flag, log streams, ECS CPU/memory, ALB requests and RDS connections. Screenshots should prove a claim, not just show a console page.
 
-**COMPLETE** ✅
+## 1️⃣2️⃣ Cost + Cleanup
 
-Captured ECS CPU/memory, ECS service state, ALB target health/request count, RDS state/connections and CloudWatch log streams.
+Capture Cost Explorer checkpoint, then execute `99-cleanup-runbook.md`. Do not leave ALB/RDS/Fargate/public IPv4 resources running after evidence collection.
 
-Cost Explorer checkpoint showed negligible/~$0.00 visible usage for the captured 2026-09-01 through 2026-09-03 window. Billing data can lag.
+## 🧯 Troubleshooting Lessons
 
-## 🟠 Gate 9 — Cleanup
+- `TaskFailedToStart` + secret injection → validate secret JSON keys/ARN suffix; never print password.
+- Public Fargate IP times out directly → check SG source; in this lab that timeout was expected security behavior.
+- Missing DB backup → inspect retained artifacts rather than fabricating data.
+- Scaling not triggering → inspect actual CPU datapoints/alarm evaluation before changing policy; restore intended target after controlled test.
+- AWS waiter fails with `ExpiredToken` → refresh credentials and rerun verification. Do not print a success message unconditionally after a failed command.
 
-**NEXT** ▶️
+## 🏁 Independent Rebuild Rule
 
-Execute `99-cleanup-runbook.md`. Required final proof:
-
-```text
-phase05-final-cleanup.png
-phase05-residual-audit.png
-```
-
-Preserve Phase 03 retained AMI `ami-0cbd2e9ec0d6f9168`, snapshot `snap-0920a020c47fb6447`, and S3 bucket `madar-operational-files-197821101770`.
+At every gate use: **create → verify → capture only meaningful evidence → continue**. Never trust a command because it returned no text; verify the resulting AWS state.
