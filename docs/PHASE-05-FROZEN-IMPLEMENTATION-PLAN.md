@@ -1,186 +1,117 @@
-# 📋 Phase 05 — Frozen Implementation Plan
+# 📋 Phase 05 — Frozen Implementation Plan & Final Record
 
-> 🔒 **Architecture baseline remains frozen.**  
-> 🟠 **Execution checkpoint: 2026-09-03 — build/validation complete; cleanup next.**  
-> This document preserves the approved architecture while recording actual execution. Live truth is in `../CURRENT-STATE.md`.
+> 🔒 **Architecture baseline frozen** · 🟢 **Execution COMPLETE** · 🧹 **Runtime CLEANED UP** · 📅 `2026-09-03`
 
 ## 🎯 Objective
 
-Modernize MADAR's existing Flask workload from a VM-origin runtime into a portable containerized ECS/Fargate service while preserving PostgreSQL as an external managed data layer, then prove reliability, scaling, dependency behavior, observability and cleanup discipline.
+Move MADAR's VM-origin Flask workload into a portable ECS/Fargate runtime with PostgreSQL as an external managed data layer, then prove recovery, security boundaries, self-healing, scaling, dependency behavior, observability, cost awareness and cleanup discipline.
 
-## 🔗 Executed Continuity
+## 🧭 Plan → Actual Result
 
 ```text
-Phase 03 retained AMI                 ✅
-  → temporary recovery EC2            ✅
-  → Flask source extraction           ✅
-  → Docker + Gunicorn + non-root      ✅
-  → application ECR v1                ✅
-  → Phase 05 VPC / SG / private RDS   ✅
-  → retained snapshot DB recovery     ✅
-  → S3-backed one-off restore task    ✅
-  → ECS Fargate service               ✅
-  → ALB                               ✅
-  → self-healing                      ✅
-  → target-tracking scale-out         ✅
-  → RDS dependency failure/recovery   ✅
-  → observability + cost evidence     ✅
-  → destructive cleanup              ⏳ NEXT
+Phase 03 retained AMI                 ✅ used
+→ temporary recovery EC2              ✅ used then deleted
+→ Flask source extraction             ✅
+→ Docker + Gunicorn + non-root        ✅
+→ application ECR v1                  ✅ published then repo deleted
+→ VPC / SG / private RDS              ✅ built/tested then deleted
+→ retained snapshot DB recovery       ✅
+→ S3-backed restore task              ✅ exit 0
+→ ECS Fargate + ALB                   ✅ validated then deleted
+→ self-healing                        ✅ proven
+→ target-tracking scale-out           ✅ proven
+→ RDS dependency failure/recovery     ✅ proven
+→ observability                       ✅ captured
+→ cost evidence                       ✅ captured
+→ destructive cleanup                ✅ complete
+→ residual audit                      ✅ clean
 ```
 
-## 🏗️ Frozen Lab Architecture
+## 🏗️ Executed Lab Architecture
 
 ```text
 🌍 Internet
   ↓ HTTP :80
-⚖️ ALB — two public subnets
-  ↓ TCP :8080
-🚀 ECS Service / Fargate
-  ├── awsvpc
-  ├── public subnets + public IPv4
-  ├── 0.25 vCPU / 512 MiB
-  ├── desired baseline 1
-  └── ingress only from ALB-SG
-  ↓ TCP :5432
-🐘 RDS PostgreSQL
-  ├── private subnets
-  ├── Single-AZ
-  ├── db.t4g.micro
-  ├── 20 GB gp3
-  └── PubliclyAccessible=false
+⚖️ ALB — public subnets A/B
+  ↓ :8080
+🚀 ECS Fargate — 0.25 vCPU / 512 MiB / public IPv4
+  ↓ :5432
+🐘 RDS PostgreSQL — private subnets / db.t4g.micro / Single-AZ
+
+📦 ECR   🔐 Secrets Manager   📊 CloudWatch   🛡️ SG-to-SG boundaries
 ```
 
-Supporting services: ECR, Secrets Manager, CloudWatch Logs/Metrics and least-privilege IAM.
+## 🐳 Container Standard Implemented
 
-## 🗃️ Database Recovery Addition
+- `python:3.12-slim`
+- Gunicorn, 2 workers, `0.0.0.0:8080`
+- non-root `madar` user
+- pinned dependencies
+- `.dockerignore`
+- stdout/stderr logs
+- environment-based `MADAR_DB_*` config
+- `/api/health` for liveness
+- `/api/ready` for DB readiness
 
-The implementation discovered that the retained S3 operational bucket did not already contain a full PostgreSQL dump. The retained Phase 03 EBS snapshot was therefore inspected read-only using temporary resources. The newer authoritative custom dump was recovered, copied to the retained S3 bucket under `database-backups/`, and restored through a dedicated one-off Fargate task.
+## 🗃️ Unplanned but Important Recovery Work
 
-The restore task role was restricted to `s3:GetObject` for the single dump object. The restore task exited `0` and logged successful completion. Temporary inspection EC2/EBS/SG resources were removed.
+The plan assumed continuity data would be available, but S3 contained operational exports/reports rather than the full PostgreSQL dump. I therefore inspected the retained Phase 03 EBS snapshot read-only, found the newer authoritative custom dump, copied it to S3, built a restore image and ran a one-off Fargate restore task. This became one of the strongest real-world troubleshooting parts of the phase.
 
-## 🐳 Container Design — Implemented
+## 🧪 Validation Matrix
 
-- ✅ `python:3.12-slim`
-- ✅ Gunicorn / 2 workers
-- ✅ non-root `madar` user
-- ✅ pinned dependencies
-- ✅ stdout/stderr logging
-- ✅ external `MADAR_DB_*` configuration
-- ✅ `/api/health` liveness
-- ✅ `/api/ready` DB readiness
-- ✅ `.dockerignore`
+| Gate | Result |
+|---|---|
+| 🔎 AMI/source recovery | ✅ PASS |
+| 🐳 Docker/non-root/health | ✅ PASS |
+| 📦 ECR publication | ✅ PASS |
+| 🗃️ DB dump recovery + restore | ✅ PASS |
+| 🚀 Fargate runtime | ✅ PASS |
+| ⚖️ ALB target + end-to-end app | ✅ PASS |
+| ♻️ task self-healing | ✅ PASS |
+| 📈 automatic scale-out | ✅ PASS |
+| 🔌 DB dependency failure/recovery | ✅ PASS |
+| 📊 observability | ✅ PASS |
+| 💰 cost evidence | ✅ PASS |
+| 🧹 destructive cleanup | ✅ PASS |
+| 🔍 residual audit | ✅ PASS |
 
-## 🌐 Networking / Security — Implemented
+## 🧯 Deviations / Errors Encountered
+
+1. **Imported AMI SSH behavior:** selected EC2 key pair was not injected into the imported guest as expected; recovery used preserved OS access and temporary resources were destroyed afterward.
+2. **Malformed Secrets Manager JSON:** first Fargate task failed with `TaskFailedToStart`; secret structure was corrected without exposing the password.
+3. **Direct Fargate test timeout:** expected because ECS-SG allowed `8080` only from ALB-SG; this validated the boundary.
+4. **Missing DB dump in S3:** recovered from retained snapshot instead of inventing/reseeding production-equivalent data.
+5. **40% scaling threshold did not trigger quickly:** controlled threshold temporarily lowered to 5%, scale-out proven, target restored to 40%.
+6. **Readiness during DB outage appeared as ALB-facing 502:** recorded exactly as observed.
+7. **Expired AWS CLI token during RDS waiter:** session refreshed and deletion re-verified; a PowerShell `Write-Host` message was not treated as proof by itself.
+
+## 🏭 Production Controls Deferred by Scope/Cost
 
 ```text
-0.0.0.0/0 → ALB-SG :80       ✅
-ALB-SG     → ECS-SG :8080     ✅
-ECS-SG     → RDS-SG :5432     ✅
-0.0.0.0/0 → ECS-SG            🚫
-0.0.0.0/0 → RDS-SG            🚫
+🔒 Private Fargate + NAT/VPC endpoints
+🔏 ACM/HTTPS + Route 53/owned DNS
+🐘 encrypted Multi-AZ RDS + backups
+👤 least-privilege PostgreSQL app role
+🧱 WAF / stronger edge security
+🏗️ Terraform / remote state / modules
+🔁 CI/CD + approvals + rollback
+📣 production alerts / notification routing
+📈 separately evidenced scale-in
+☸️ EKS/Kubernetes
 ```
 
-No NAT Gateway was used. Public Fargate ENIs are a deliberate short-lived lab trade-off; production guidance remains private tasks with controlled egress/VPC endpoints as appropriate.
+These are not represented as implemented.
 
-## 🔑 IAM — Implemented
+## 🧭 Rebuild Sequence
 
-`MADAR-P05-ECS-ExecutionRole` supplies ECR pull, CloudWatch logging and narrowly scoped Secrets Manager retrieval for task startup.
+A person opening this repository without prior context should execute the gates in this order: preflight → source recovery → Docker → ECR → VPC/SG/RDS → secret/IAM → DB restore if needed → ECS task → TG/ALB/service → functional validation → reliability/failure tests → observability/cost → cleanup → residual audit.
 
-`MADAR-P05-Restore-TaskRole` supplies only the S3 object read needed by the one-off restore task.
+Exact operational commands and verification patterns are in the runbooks.
 
-Application code is not given broad AWS API permissions.
+## 🧹 Final Cleanup Result
 
-## ⚖️ ECS / ALB — Implemented
+All Phase 05 runtime resources were removed after evidence capture. The Phase 03 AMI, snapshot, S3 bucket and recovered dump were intentionally retained for future MADAR phases.
 
-```text
-Cluster       MADAR-P05-Cluster
-Service       MADAR-P05-App-Service
-App task def  madar-phase05-app:1
-Target group  MADAR-P05-TG / ip / :8080
-Health path   /api/health
-ALB            MADAR-P05-ALB / HTTP :80
-```
+## 🏁 Final Rule
 
-Validated through the ALB: health `200`, readiness `200`, and the MADAR dashboard rendered successfully.
-
-## 🧪 Validation Gates
-
-| Gate | Requirement | State |
-|---|---|---|
-| 🔎 A | AMI recovery / source extraction / recovery cleanup | ✅ PASS |
-| 🐳 B | Docker / health / non-root / external config | ✅ PASS |
-| 📦 C | ECR application image publication | ✅ PASS |
-| 🗃️ D | Legacy DB dump recovery + controlled restore | ✅ PASS |
-| 🚀 E | Fargate runtime + logs + DB-backed application | ✅ PASS |
-| ⚖️ F | ALB healthy target + public functional path | ✅ PASS |
-| ♻️ G | desiredCount=2 + intentional task replacement | ✅ PASS |
-| 📈 H | target-tracking automatic scale-out | ✅ PASS |
-| 🔌 I | RDS dependency failure + recovery | ✅ PASS |
-| 📊 J | observability + cost checkpoint | ✅ PASS |
-| 🧹 K | destructive cleanup + residual audit | ⏳ NEXT |
-
-### Claim boundary
-
-Automatic scale-out is proven. A separate automatic scale-in event is not claimed. During RDS failure injection, `/api/health` remained `200` and `/api/ready` was observed as `502` through the ALB; after restoring TCP/5432 both returned `200`.
-
-## 📈 Auto Scaling Final Configuration
-
-```text
-MinCapacity        1
-MaxCapacity        2
-Metric             ECSServiceAverageCPUUtilization
-TargetValue        40%
-ScaleOutCooldown   60s
-ScaleInCooldown    60s
-```
-
-For the controlled test only, TargetValue was temporarily set to 5%. Three datapoints crossed the test threshold, the high alarm entered `ALARM`, the policy triggered, and desired count moved automatically from 1 to 2. TargetValue was restored to 40% immediately afterward.
-
-## 📊 Observability — Captured
-
-Evidence includes ECS CPU/memory, service/task state, ALB target health/request volume, RDS state/connections and CloudWatch log streams.
-
-## 💰 Cost Controls
-
-No NAT Gateway, EKS, Multi-AZ RDS, WAF, custom domain, Terraform or CI/CD was added. The pre-cleanup Cost Explorer screenshot showed negligible/~$0.00 visible usage for the captured period; billing data may lag.
-
-## 🧭 Implementation Checklist
-
-```text
-01–21  foundation / Docker / ECR / VPC / RDS       ✅
-22     legacy DB recovery + restore                  ✅
-23–30  Secrets / IAM / logs / ECS runtime / DB       ✅
-31–35  target group / ALB / service / functional     ✅
-36–37  two-task test / self-healing                   ✅
-38–39  target tracking / controlled scale-out         ✅
-40     ECS→RDS dependency failure/recovery            ✅
-41     logs/metrics/evidence                           ✅
-42     Cost Explorer checkpoint                       ✅
-43     cleanup runbook                                ▶️ NEXT
-44     residual-resource audit                         ⏳
-45     final repository closeout                       ⏳
-46     MADAR master repository update                  ⏳
-```
-
-## 🧹 Cleanup Order
-
-```text
-📈 scaling
-→ 🚀 ECS service/tasks
-→ ⚖️ ALB/listener/TG
-→ 📋 app/restore/verify task definitions + cluster
-→ 🐘 RDS + DB subnet group
-→ 🔐 secret + 📊 log group
-→ 📦 both Phase 05 ECR repositories
-→ 🔑 Phase 05 IAM roles/policies
-→ 🛡️ SGs
-→ 🌐 subnets/routes/IGW/VPC
-→ 🔍 residual audit
-→ 💰 final cost closeout
-```
-
-Do not delete the retained Phase 03 AMI, snapshot or operational S3 bucket as part of this runbook.
-
-## 🏁 Closeout Rule
-
-Phase 05 is complete only after the destructive cleanup and residual audit are proven. Running infrastructure is a validation state, not the final state.
+A successful lab is not just **"it ran"**. For this phase, done meant: **I could recover it, run it, break it, observe it, restore it, scale it, explain the trade-offs, and remove it safely.**
