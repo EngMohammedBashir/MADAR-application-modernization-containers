@@ -1,9 +1,9 @@
 # 🧹 Phase 05 — Cleanup Runbook
 
-> ⚠️ All required build/failure/scaling/observability/cost evidence has been captured.  
-> 🎯 **This is now the active runbook.** Goal: remove Phase 05 cost-bearing infrastructure while preserving Git evidence and intentionally retained Phase 03 artifacts.
+> 🟢 **EXECUTED SUCCESSFULLY — 2026-09-03**  
+> Purpose: let me—or another engineer—repeat the dependency-safe teardown without deleting MADAR continuity assets.
 
-## 🛡️ Never Delete as Part of Phase 05
+## 🛡️ NEVER Delete in Phase 05 Cleanup
 
 ```text
 AMI       ami-0cbd2e9ec0d6f9168
@@ -11,64 +11,79 @@ Snapshot  snap-0920a020c47fb6447
 S3        madar-operational-files-197821101770
 ```
 
-The S3 bucket now also contains the recovered database dump. Retention/deletion of these Phase 03 assets requires a separate decision.
-
-## 📍 Known Phase 05 Cleanup Inventory
+## 🧠 Dependency-Safe Order
 
 ```text
-VPC             vpc-011a441b0a790c458
-IGW             igw-0df8ed399478fa879
-Public RT       rtb-076fdacedac35cd66
-Private RT      rtb-0ed3daeca13e9987e
-ALB-SG          sg-00b9b70e13293ff46
-ECS-SG          sg-0d13f6af551e284c8
-RDS-SG          sg-00ae439cb916d164b
-RDS             madar-p05-postgres
-DB subnet group madar-p05-db-subnet-group
-Secret          MADAR/Phase05/Postgres
-Log group       /ecs/madar-phase05-app
-ECR app         madar-phase05-app
-ECR restore     madar-p05-restore
-ECS cluster     MADAR-P05-Cluster
-ECS service     MADAR-P05-App-Service
-ALB             MADAR-P05-ALB
-Target group    MADAR-P05-TG
-Task defs       madar-phase05-app:1
-                madar-p05-db-restore:1
-                madar-p05-db-verify:1
-IAM execution   MADAR-P05-ECS-ExecutionRole
-IAM restore     MADAR-P05-Restore-TaskRole
-Scaling policy  MADAR-P05-CPU-TargetTracking
-Scalable target service/MADAR-P05-Cluster/MADAR-P05-App-Service
+Scaling
+→ ECS service/tasks
+→ ALB/TG
+→ task definitions/cluster
+→ RDS/subnet group
+→ secret/logs/ECR
+→ IAM
+→ SGs
+→ subnets/custom route tables
+→ IGW
+→ VPC
+→ residual audit
+→ cost closeout
 ```
 
-## 1️⃣ Remove Application Auto Scaling
+## 1️⃣ Scaling — ✅ DELETED
 
-Delete the target-tracking policy, then deregister the scalable target. Verify no scaling policy remains for the ECS service.
+```powershell
+aws application-autoscaling delete-scaling-policy --service-namespace ecs --resource-id service/MADAR-P05-Cluster/MADAR-P05-App-Service --scalable-dimension ecs:service:DesiredCount --policy-name MADAR-P05-CPU-TargetTracking --region us-east-1
+aws application-autoscaling deregister-scalable-target --service-namespace ecs --resource-id service/MADAR-P05-Cluster/MADAR-P05-App-Service --scalable-dimension ecs:service:DesiredCount --region us-east-1
+```
 
-## 2️⃣ Scale ECS Service to Zero
+Verify both policy/target lists are empty.
 
-Set `MADAR-P05-App-Service` desired count to `0`. Wait for `runningCount=0` and `pendingCount=0`.
+## 2️⃣ ECS Service — ✅ DELETED
 
-## 3️⃣ Delete ECS Service
+```powershell
+aws ecs update-service --cluster MADAR-P05-Cluster --service MADAR-P05-App-Service --desired-count 0 --region us-east-1
+aws ecs delete-service --cluster MADAR-P05-Cluster --service MADAR-P05-App-Service --force --region us-east-1
+```
 
-Delete the service after tasks drain. Verify no running service tasks remain.
+I verified `Desired=0`, `Running=0`, `Pending=0`, then no running tasks/services remained.
 
-## 4️⃣ Delete ALB Listener / Rules
+## 3️⃣ ALB + Target Group — ✅ DELETED
 
-Discover the listener ARN rather than guessing. Delete the HTTP listener/rules associated with `MADAR-P05-ALB`.
+Discover ARNs rather than guessing when rebuilding the procedure. Delete ALB, wait for disappearance/ENI release, then delete TG. Final verification returned `LoadBalancerNotFound` and `TargetGroupNotFound`.
 
-## 5️⃣ Delete ALB
+## 4️⃣ RDS + DB Subnet Group — ✅ DELETED
 
-Delete `MADAR-P05-ALB` and wait until `describe-load-balancers` no longer returns it. Allow ENI cleanup to finish before network deletion.
+```powershell
+aws rds delete-db-instance --db-instance-identifier madar-p05-postgres --skip-final-snapshot --delete-automated-backups --region us-east-1
+aws rds wait db-instance-deleted --db-instance-identifier madar-p05-postgres --region us-east-1
+aws rds delete-db-subnet-group --db-subnet-group-name madar-p05-db-subnet-group --region us-east-1
+```
 
-## 6️⃣ Delete Target Group
+⚠️ **Actual incident:** the first waiter failed with `ExpiredToken`. A following PowerShell `Write-Host "RDS DELETED"` still printed because it was separated with `;`. I did **not** accept that text as proof. After refreshing the CLI session, I reran the waiter successfully and then deleted/verified the subnet group.
 
-Delete `MADAR-P05-TG` only after listener/load-balancer references are gone.
+**Lesson:** verification output from AWS is authoritative; decorative shell output is not.
 
-## 7️⃣ Deregister Task Definitions
+## 5️⃣ Secret + Logs — ✅ DELETED
 
-Deregister:
+```powershell
+aws secretsmanager delete-secret --secret-id "MADAR/Phase05/Postgres" --force-delete-without-recovery --region us-east-1
+aws logs delete-log-group --log-group-name "/ecs/madar-phase05-app" --region us-east-1
+```
+
+The secret returned a `DeletionDate`/`DeletedDate`. Force deletion is asynchronous, so temporary `describe-secret` visibility is not unexpected.
+
+## 6️⃣ ECR — ✅ DELETED
+
+```powershell
+aws ecr delete-repository --repository-name madar-phase05-app --force --region us-east-1
+aws ecr delete-repository --repository-name madar-p05-restore --force --region us-east-1
+```
+
+Both deletion calls returned repository metadata; later lookup returned `RepositoryNotFoundException`.
+
+## 7️⃣ Task Definitions + Cluster — ✅ DELETED/INACTIVE
+
+Deregistered:
 
 ```text
 madar-phase05-app:1
@@ -76,122 +91,71 @@ madar-p05-db-restore:1
 madar-p05-db-verify:1
 ```
 
-AWS may retain inactive task-definition metadata; document that accurately.
+Then:
 
-## 8️⃣ Delete ECS Cluster
-
-Delete `MADAR-P05-Cluster` only after service/tasks are gone.
-
-## 9️⃣ Delete RDS
-
-Delete `madar-p05-postgres` with **skip final snapshot** as planned for this disposable Phase 05 database. Wait until the instance disappears before deleting its subnet group.
-
-## 🔟 Delete DB Subnet Group
-
-Delete `madar-p05-db-subnet-group` after RDS is fully gone.
-
-## 1️⃣1️⃣ Delete Phase 05 Secret
-
-Delete `MADAR/Phase05/Postgres` using an appropriate disposable-lab deletion method. Never retrieve or print the secret value during verification.
-
-## 1️⃣2️⃣ Delete CloudWatch Log Group
-
-Delete `/ecs/madar-phase05-app` only after all evidence/log requirements are satisfied.
-
-## 1️⃣3️⃣ Delete Both Phase 05 ECR Repositories
-
-Delete images/repositories:
-
-```text
-madar-phase05-app
-madar-p05-restore
+```powershell
+aws ecs delete-cluster --cluster MADAR-P05-Cluster --region us-east-1
 ```
 
-The restore image is temporary and should not be forgotten.
+Verification: cluster `INACTIVE`, running tasks `0`, active services `0`. AWS can retain inactive task-definition metadata; that is not a running resource.
 
-## 1️⃣4️⃣ Remove IAM Roles / Policies
+## 8️⃣ IAM — ✅ DELETED
 
-For `MADAR-P05-ECS-ExecutionRole`:
-- detach `AmazonECSTaskExecutionRolePolicy`,
-- delete the Phase 05 secret-access inline policy,
-- delete the role.
+Execution role:
+- detached AWS-managed `AmazonECSTaskExecutionRolePolicy`;
+- deleted inline `MADAR-P05-ReadPostgresSecret`;
+- deleted role.
 
-For `MADAR-P05-Restore-TaskRole`:
-- delete the exact-dump S3 read inline policy,
-- delete the role.
+Restore role:
+- deleted inline `MADAR-P05-Restore-Dump-ReadOnly`;
+- deleted role.
 
-Delete any other Phase 05 task role only if actually present and verified by name/tag.
-
-## 1️⃣5️⃣ Delete Security Groups
-
-After ALB/ECS/RDS ENIs are gone, delete:
-
-```text
-sg-00b9b70e13293ff46  ALB-SG
-sg-0d13f6af551e284c8  ECS-SG
-sg-00ae439cb916d164b  RDS-SG
+```powershell
+aws iam list-roles --query "Roles[?contains(RoleName,'MADAR-P05')].RoleName" --output table
 ```
 
-Do not manually delete the VPC default security group.
+Final result: no matching Phase 05 roles.
 
-## 1️⃣6️⃣ Delete Subnets / Custom Route Tables
+## 9️⃣ Network — ✅ DELETED
 
-Delete all four Phase 05 subnets after dependent ENIs disappear, then delete the custom public/private route tables. The VPC main route table is removed with the VPC.
+Before deletion I checked VPC ENIs and got none. Then I removed RDS-SG → ECS-SG → ALB-SG, four subnets, custom public/private route tables, detached/deleted IGW and finally deleted VPC `vpc-011a441b0a790c458`.
 
-## 1️⃣7️⃣ Detach / Delete IGW
+Expected verification errors such as `InvalidGroup.NotFound`, `InvalidInternetGatewayID.NotFound` and `InvalidVpcID.NotFound` were treated as positive proof of absence.
 
-Detach `igw-0df8ed399478fa879` from `vpc-011a441b0a790c458`, then delete it.
+The automatically created **main route table** was intentionally not deleted manually; it disappeared with the VPC.
 
-## 1️⃣8️⃣ Delete Phase 05 VPC
+## 🔍 Final Residual Audit — ✅ CLEAN
 
-Delete `vpc-011a441b0a790c458` only after dependencies are gone.
+The final colored PowerShell audit checked Phase 05 ECS, RDS, ALB, ECR, IAM and VPC and printed `DELETED` when no matching resources remained. It also separately verified retained AMI/snapshot/S3.
 
-## 🔍 19 — Residual Resource Audit
+Evidence: `../evidence/phase05-residual-audit.png`.
 
-Check at minimum:
+## 💰 Cost Closeout — ✅ CAPTURED
 
-```text
-🚀 ECS clusters/services/running tasks
-📈 Application Auto Scaling policies/targets
-⚖️ ALB/listeners/target groups
-🐘 RDS instances/subnet groups
-🌐 public IPv4 / Elastic IPs / ENIs
-🚫 NAT gateways — should be none for Phase 05
-🏠 Phase 05 VPC/subnets/routes/IGW
-📦 both ECR repositories
-🔐 Phase 05 secret
-📊 Phase 05 log group
-🔑 both Phase 05 IAM roles/policies
-```
+Final available Cost Explorer output was captured in `../evidence/Cost-Closeout-Evidence.png`. Billing data can lag, so the screenshot is a closeout checkpoint—not a guarantee of final settled `$0.00`.
 
-Capture `phase05-residual-audit.png` only after the audit is clean.
+## 🧯 Common Cleanup Traps
 
-## 💰 20 — Final Cost Closeout
+- ❌ Delete VPC first → dependency errors.
+- ❌ Delete RDS subnet group while DB still exists → dependency error.
+- ❌ Delete SGs while ENIs still exist → dependency error.
+- ❌ Delete IAM role before detaching/deleting policies → conflict.
+- ❌ Trust `Write-Host` after a failed AWS command → false success.
+- ❌ Delete retained Phase 03 AMI/snapshot/S3 → breaks later MADAR continuity.
 
-Cost Explorer can lag. Capture the final available month-to-date checkpoint and describe it as a billing checkpoint, not an absolute real-time zero-cost guarantee.
-
-## 📸 Cleanup Evidence
-
-Recommended:
+## 🏁 Definition of Done — ACHIEVED
 
 ```text
-phase05-final-cleanup.png
-phase05-residual-audit.png
+No Phase 05 running Fargate tasks       ✅
+No scaling target/policy                ✅
+No Phase 05 ALB/TG                      ✅
+No Phase 05 RDS/subnet group            ✅
+No Phase 05 ECR repositories            ✅
+No Phase 05 IAM roles                   ✅
+No Phase 05 VPC                         ✅
+Residual audit clean                    ✅
+Cost closeout captured                  ✅
+Phase 03 retained assets untouched      ✅
 ```
 
-## 🏁 Definition of Done
-
-```text
-No running Phase 05 Fargate tasks       ✅ required
-No Phase 05 scaling target/policy       ✅ required
-No Phase 05 ALB/TG                      ✅ required
-No Phase 05 RDS/subnet group            ✅ required
-No Phase 05 public IPv4/ENIs surprise   ✅ required
-No Phase 05 ECR repos                   ✅ required
-No Phase 05 secret/log group            ✅ required
-No Phase 05 IAM roles                   ✅ required
-No Phase 05 VPC                         ✅ required
-Residual audit clean                    ✅ required
-Final cost checkpoint recorded          ✅ required
-Phase 03 retained assets untouched      ✅ required
-```
+**Cleanup is part of the engineering deliverable, not an afterthought.**
