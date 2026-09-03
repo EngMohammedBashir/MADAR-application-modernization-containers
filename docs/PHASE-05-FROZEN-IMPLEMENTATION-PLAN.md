@@ -1,12 +1,14 @@
-# Phase 05 — Frozen Implementation Plan
+# 📋 Phase 05 — Frozen Implementation Plan
 
-**Status:** Architecture frozen; live account preflight required before deployment.
+> 🔒 **Architecture baseline remains frozen.**  
+> 🟡 **Execution checkpoint: 2026-09-03 — implementation is actively in progress.**  
+> This document preserves the approved plan while marking what has actually been completed. Live truth is summarized in `../CURRENT-STATE.md`.
 
-## 1. Objective
+## 🎯 Objective
 
 Modernize MADAR's existing Flask application runtime from a VM-origin workload into a containerized ECS/Fargate service while preserving PostgreSQL as an external managed data layer.
 
-## 2. Business continuity
+## 🔗 Business Continuity
 
 ```text
 Phase 03
@@ -14,166 +16,144 @@ Legacy VMware VM
   → EC2 rehost
   → PostgreSQL replatform to RDS
   → operational files to S3
-  → temporary compute/database migration resources cleaned up
-  → AMI + backing snapshot + S3 intentionally retained
+  → temporary migration resources cleaned up
+  → AMI + backing snapshot + S3 retained
 
 Phase 05
-Retained AMI
-  → temporary recovery EC2
-  → extract existing Flask app
-  → remove VM assumptions
-  → Dockerize
-  → ECR
-  → ECS Fargate
-  → ALB
-  → new temporary private RDS PostgreSQL
-  → failure / recovery / scaling proof
-  → cleanup
+Retained AMI                         ✅
+  → temporary recovery EC2           ✅
+  → extract existing Flask app       ✅
+  → remove VM assumptions            ✅
+  → Dockerize                        ✅
+  → ECR v1                           ✅
+  → VPC / security / private RDS     ✅
+  → Secrets Manager                  ✅
+  → IAM execution role               🔄 current
+  → ECS Fargate                      ⏳
+  → ALB                              ⏳
+  → failure / recovery / scaling     ⏳
+  → cleanup                          ⏳
 ```
 
-## 3. Frozen lab architecture
+## 🏗️ Frozen Lab Architecture
 
 ```text
-Internet
+🌍 Internet
   ↓
-Internet Gateway
+🚪 Internet Gateway
   ↓
-ALB in two public subnets / two AZs
+⚖️ ALB in two public subnets / two AZs
   ↓
-Target Group — target type IP
+🎯 Target Group — target type IP
   ↓
-ECS Service / Fargate
+🚀 ECS Service / Fargate
   ├── awsvpc
   ├── public subnets
   ├── assignPublicIp = ENABLED
   ├── desiredCount = 1 baseline
-  ├── 0.25 vCPU / 512 MiB initial task size
-  └── ECS-SG inbound only from ALB-SG
+  ├── 0.25 vCPU / 512 MiB
+  └── inbound only from ALB-SG
   ↓ TCP/5432
-RDS PostgreSQL
+🐘 RDS PostgreSQL
   ├── private subnets
   ├── Single-AZ
-  ├── db.t4g.micro subject to live preflight
+  ├── db.t4g.micro
   ├── 20 GB gp3
   ├── not publicly accessible
-  └── RDS-SG inbound only from ECS-SG
+  └── inbound only from ECS-SG
 ```
 
-## 4. Supporting services
+## 🧩 Supporting Services
 
 Required:
 
-- ECR private repository,
-- Secrets Manager for DB credentials,
-- CloudWatch Logs for application/container logs,
-- IAM execution role,
-- task role only if the application calls AWS APIs.
-
-Optional only if recovered source proves a requirement:
-
-- existing Phase 03 S3 operational-data bucket.
+- 📦 ECR private repository — ✅ created/published,
+- 🔐 Secrets Manager — ✅ created,
+- 📊 CloudWatch Logs — ⏳ pending ECS runtime,
+- 🔑 IAM execution role — 🔄 role created; permissions being completed,
+- 🧑‍💻 Task Role — only if runtime AWS API access is required.
 
 Not planned:
 
-- NAT Gateway,
-- VPC interface endpoints for the short-lived lab,
-- EKS,
-- Multi-AZ RDS,
-- Route 53/custom domain,
-- WAF,
-- Terraform,
-- CI/CD.
+- 🚫 NAT Gateway,
+- 🚫 VPC interface endpoints for this short-lived lab,
+- 🚫 EKS,
+- 🚫 Multi-AZ RDS,
+- 🚫 Route 53/custom domain,
+- 🚫 WAF,
+- 🚫 Terraform,
+- 🚫 CI/CD.
 
-## 5. Networking decision
+## 🌐 Networking Decision
 
-For a short-lived lab, public Fargate ENIs are the deliberate cost/complexity trade-off. Direct ingress to tasks remains blocked by Security Groups.
+For this short-lived lab, public Fargate ENIs are a deliberate cost/complexity trade-off. Direct ingress to tasks remains blocked by Security Groups.
 
 ```text
-0.0.0.0/0 → ALB-SG :80
-ALB-SG     → ECS-SG :application-port
-ECS-SG     → RDS-SG :5432
-0.0.0.0/0 → ECS-SG  DENIED
-0.0.0.0/0 → RDS-SG  DENIED
+0.0.0.0/0 → ALB-SG :80       ✅ configured
+ALB-SG     → ECS-SG :8080     ✅ configured
+ECS-SG     → RDS-SG :5432     ✅ configured
+0.0.0.0/0 → ECS-SG            🚫 denied
+0.0.0.0/0 → RDS-SG            🚫 denied
 ```
 
-Production guidance is documented separately: private tasks + controlled egress.
+Production guidance remains private tasks + controlled egress.
 
-## 6. Container design
+## 🐳 Container Design
 
-During AMI recovery, inventory:
+Implemented requirements:
 
-- application source,
-- templates/static assets,
-- Python version/dependencies,
-- systemd unit/launch assumptions,
-- local DB configuration,
-- filesystem state,
-- environment variables,
-- secrets,
-- hardcoded addresses/paths,
-- logging behavior,
-- listening port.
+- ✅ `python:3.12-slim`,
+- ✅ Gunicorn,
+- ✅ non-root user,
+- ✅ pinned dependencies,
+- ✅ stdout/stderr logging,
+- ✅ external database configuration,
+- ✅ `/api/health` liveness,
+- ✅ `/api/ready` dependency readiness,
+- ✅ `.dockerignore` for local/secret/unnecessary artifacts.
 
-Do **not** copy:
+The local container passed liveness and non-root validation. Readiness correctly returned `503` without a local PostgreSQL dependency.
 
-- passwords,
-- SSH private keys,
-- AWS credentials,
-- machine certificates,
-- shell history,
-- database dumps not intentionally required,
-- OS-specific service files as runtime dependencies,
-- `.env` secrets.
+## 🐘 RDS Design
 
-Target container requirements:
-
-- slim supported Python image,
-- Gunicorn,
-- non-root user,
-- pinned dependencies,
-- stdout/stderr logging,
-- stateless filesystem,
-- configuration through environment/secrets,
-- `/api/health` for liveness,
-- `/api/ready` or functional DB-backed endpoint for dependency readiness.
-
-## 7. RDS design
+Live implementation:
 
 ```text
-PostgreSQL
+PostgreSQL 18.3
 Single-AZ
-Private
+Private / PubliclyAccessible=false
 20 GB gp3
+db.t4g.micro
 Deletion protection OFF
-Backup retention 0 for short-lived lab
-Skip final snapshot during cleanup
+Backup retention 0
 ```
 
-The database is recreated specifically for Phase 05. The retained Phase 03 EBS snapshot backs the AMI; it is not an RDS snapshot and must not be presented as an RDS restore source.
+⚠️ Execution note: the current temporary lab instance reports storage encryption disabled. Production hardening should enable encryption at rest. This does not change the frozen lab's short-lived validation objective.
 
-## 8. IAM
+## 🔑 IAM
 
-### Task Execution Role
+### 🏗️ Task Execution Role
 
-Used by ECS/Fargate infrastructure to:
+Used by ECS/Fargate infrastructure for:
 
-- authenticate/pull from ECR,
-- publish logs,
-- retrieve the specific Secrets Manager secret used in task definition secret injection.
+- ECR authentication/image pull,
+- CloudWatch log publication,
+- retrieval/injection of the specific Secrets Manager values referenced by the task definition.
 
-Use the standard ECS task execution managed policy plus only the additional secret/KMS permissions actually needed.
+Current state:
 
-### Task Role
+```text
+MADAR-P05-ECS-ExecutionRole  ✅ role created
+Trust: ecs-tasks.amazonaws.com
+Managed execution policy     ⏳ next
+Secret-specific access       ⏳ next
+```
 
-Used by application code at runtime.
+### 🧑‍💻 Task Role
 
-Default: no AWS API permissions.
+Used by application code at runtime. Default remains no AWS API permissions unless the recovered workload proves a requirement.
 
-If the recovered app genuinely reads S3, grant only the required S3 actions on the required prefix.
-
-PostgreSQL network/database authentication does not require generic RDS IAM permissions unless IAM DB authentication is intentionally introduced, which is not planned for this lab.
-
-## 9. Health model
+## ❤️ Health Model
 
 ```text
 /api/health
@@ -182,214 +162,122 @@ PostgreSQL network/database authentication does not require generic RDS IAM perm
 
 /api/ready
   → database/dependency readiness
-  → functional validation / dependency failure test
+  → functional/dependency failure validation
 ```
 
-This prevents a database outage from causing endless container replacement when containers themselves are healthy.
+## 🚦 Validation Gates
 
-## 10. Validation gates
+| Gate | Requirement | State |
+|---|---|---|
+| 🔎 A | AMI recovery / safe extraction / recovery cleanup | ✅ PASS |
+| 🐳 B | Docker build / local health / non-root / external config | ✅ PASS |
+| 📦 C | ECR versioned image publication | ✅ PASS |
+| 🚀 D | ECS task + logs + RDS-backed API | 🔄 NEXT |
+| ⚖️ E | ALB healthy target + public functional path | ⏳ |
+| ♻️ F | desiredCount=2 + task replacement | ⏳ |
+| 📈 G | controlled auto scaling | ⏳ |
+| 🔌 H | RDS dependency failure + recovery | ⏳ |
 
-### Gate A — recovery
+## 📊 Observability
 
-- AMI launches.
-- app location/runtime identified.
-- source extracted without secrets.
-- temporary recovery EC2 terminated.
-
-### Gate B — local container
-
-- Docker image builds.
-- container starts.
-- liveness passes.
-- database configuration is external.
-- no secrets in image/history/repo.
-
-### Gate C — ECR
-
-- versioned image pushed.
-- immutable evidence of repository/tag/digest captured.
-
-### Gate D — ECS/RDS
-
-- initial task starts.
-- ECR pull succeeds.
-- logs arrive in CloudWatch.
-- task reaches RDS on 5432.
-- DB-backed API returns expected MADAR data.
-
-### Gate E — ALB
-
-- target healthy.
-- user request through ALB succeeds.
-- direct task ingress remains blocked by SG design.
-
-### Gate F — HA/self-healing
-
-- desiredCount set to 2.
-- both targets healthy.
-- one task intentionally stopped.
-- service creates replacement.
-- desired count returns to 2.
-
-### Gate G — auto scaling
-
-- baseline minimum 1 task.
-- target tracking policy enabled.
-- controlled CPU load generated.
-- scale-out observed.
-- post-load scale-in observed.
-
-### Gate H — dependency failure
-
-- temporarily revoke ECS-SG → RDS-SG 5432.
-- DB-backed readiness/request fails predictably.
-- restore rule.
-- functionality recovers.
-
-## 11. Observability
-
-Minimum useful set:
+Minimum useful set remains:
 
 - CloudWatch Logs,
-- ECS CPU/memory service metrics,
+- ECS CPU/memory,
 - ALB target health / RequestCount / TargetResponseTime / HealthyHostCount,
 - RDS basic metrics.
 
-No custom dashboard/SNS/alarms unless execution proves they add real value.
+No custom dashboard/SNS/alarms unless they add genuine validation value.
 
-## 12. HTTPS decision
+## 🔓 HTTPS Decision
 
-Lab: HTTP on ALB for short-lived validation.
+Lab: HTTP on ALB for short-lived validation.  
+Production: ACM certificate + HTTPS listener + HTTP→HTTPS redirect.
 
-Production recommendation: custom domain + ACM certificate + HTTPS listener + HTTP→HTTPS redirect.
-
-No domain will be purchased solely to make the temporary lab look more production-like.
-
-## 13. Implementation order
-
-1. Gate 0 account/cost preflight.
-2. Verify retained AMI/snapshot/S3.
-3. Launch temporary EC2 from AMI.
-4. Locate and inspect Flask source/runtime.
-5. Export safe application source.
-6. Terminate temporary EC2.
-7. Sanitize source and configuration.
-8. Create dependency manifest.
-9. Create Dockerfile / `.dockerignore`.
-10. Build image locally.
-11. Test liveness locally.
-12. Test DB-config behavior locally.
-13. Create ECR repository.
-14. Push versioned image.
-15. Create Phase 05 VPC.
-16. Create two public ALB/ECS subnets.
-17. Create private DB subnets.
-18. Create/associate route tables and IGW.
-19. Create ALB-SG, ECS-SG, RDS-SG.
-20. Create DB subnet group.
-21. Create RDS PostgreSQL and wait for `available`.
-22. Initialize schema/test data through a controlled path.
-23. Create Secrets Manager secret.
-24. Create ECS execution role and minimum task role.
-25. Create CloudWatch log group.
-26. Create ECS cluster.
-27. Register task definition.
-28. Run initial Fargate task.
-29. Verify task logs/ECR pull.
-30. Verify task→RDS connectivity and DB-backed behavior.
-31. Create target group (`ip`).
-32. Create ALB/listener.
-33. Create ECS service behind ALB.
-34. Validate `/api/health` via ALB.
-35. Validate DB-backed endpoint.
-36. Set desiredCount=2 and validate both targets.
-37. Stop one task intentionally and verify replacement.
-38. Configure target tracking auto scaling.
-39. Generate controlled load and capture scale-out/in.
-40. Perform ECS→RDS SG dependency failure/recovery test.
-41. Capture logs/metrics/screenshots.
-42. Capture Cost Explorer checkpoint.
-43. Execute cleanup runbook.
-44. Run residual-resource audit.
-45. Update project repository final state.
-46. Update MADAR master repository.
-
-## 14. Cost controls
-
-Cost clocks begin only when the corresponding resource exists/runs.
+## 🧭 Implementation Checklist
 
 ```text
-RDS       continuous while DB instance runs
-ALB       hourly + LCU while provisioned
-Fargate   CPU/RAM while tasks run
-IPv4      hourly while public addresses are in use
-Secrets   storage/API
-ECR       image storage
-Logs      ingestion/storage
+01 ✅ Gate 0 account/cost preflight
+02 ✅ Verify retained AMI/snapshot/S3
+03 ✅ Launch temporary recovery EC2
+04 ✅ Locate/inspect Flask workload
+05 ✅ Export safe source
+06 ✅ Terminate recovery EC2 + EBS/SG cleanup
+07 ✅ Sanitize application/configuration
+08 ✅ Dependency manifest
+09 ✅ Dockerfile / .dockerignore
+10 ✅ Local image build
+11 ✅ Local liveness test
+12 ✅ Local readiness/config behavior
+13 ✅ ECR repository
+14 ✅ Push v1 image
+15 ✅ Phase 05 VPC
+16 ✅ Two public subnets
+17 ✅ Two private DB subnets
+18 ✅ IGW + route tables + associations
+19 ✅ ALB-SG / ECS-SG / RDS-SG
+20 ✅ DB subnet group
+21 ✅ RDS PostgreSQL available
+22 ⏳ Initialize schema/test data through controlled ECS path
+23 ✅ Secrets Manager secret
+24 🔄 ECS execution role / minimum task role
+25 ⏳ CloudWatch log group
+26 ⏳ ECS cluster
+27 ⏳ Task definition
+28 ⏳ Initial Fargate task
+29 ⏳ Verify logs/ECR pull
+30 ⏳ Verify task→RDS + DB-backed behavior
+31 ⏳ Target group (ip)
+32 ⏳ ALB/listener
+33 ⏳ ECS service behind ALB
+34 ⏳ Validate /api/health via ALB
+35 ⏳ Validate DB-backed endpoint
+36 ⏳ desiredCount=2
+37 ⏳ task failure/self-healing
+38 ⏳ target tracking auto scaling
+39 ⏳ controlled load / scale-out/in
+40 ⏳ ECS→RDS dependency failure/recovery
+41 ⏳ logs/metrics/evidence
+42 ⏳ Cost Explorer checkpoint
+43 ⏳ cleanup runbook
+44 ⏳ residual-resource audit
+45 ⏳ final project repository closeout
+46 ⏳ MADAR master repository update
 ```
 
-Rules:
+## 💰 Cost Controls
 
-- create RDS/ALB as late as practical,
-- keep desiredCount=1 except HA/load tests,
-- delete ALB/RDS immediately after evidence,
-- no NAT Gateway,
-- run final inventory checks after cleanup.
+```text
+🐘 RDS       continuous while DB exists
+⚖️ ALB       hourly + LCU once created
+🚀 Fargate   CPU/RAM while tasks run
+🌐 IPv4      while public addresses are in use
+🔐 Secrets   storage/API
+📦 ECR       image storage
+📊 Logs      ingestion/storage
+```
 
-## 15. Cleanup order
+Rules remain: create ALB late, keep desired count at 1 except tests, no NAT Gateway, and delete cost-bearing resources promptly after evidence.
 
-See `runbooks/99-cleanup-runbook.md` for executable checks.
+## 🧹 Cleanup Order
 
-High-level:
+High level:
 
-1. disable/delete auto scaling policies/targets,
-2. scale ECS service to 0,
-3. delete ECS service and wait for drain,
-4. delete ALB listener/rules,
-5. delete ALB,
-6. delete target group,
-7. deregister task definition revisions if desired,
-8. delete ECS cluster,
-9. delete RDS with skip-final-snapshot,
-10. delete DB subnet group,
-11. schedule/force-delete temporary secret according to cleanup decision,
-12. delete CloudWatch log group if evidence already captured,
-13. delete ECR images/repository unless deliberately retained,
-14. delete security groups,
-15. delete subnets/custom route tables,
-16. detach/delete IGW,
-17. delete VPC,
-18. verify no Phase 05 residual resources.
+```text
+📈 remove scaling
+→ 🚀 ECS service/tasks
+→ ⚖️ ALB/listener/TG
+→ 🐘 RDS
+→ 🔐 secret/log decisions
+→ 📦 ECR cleanup decision
+→ 🛡️ SGs
+→ 🌐 subnets/routes/IGW/VPC
+→ 🔍 residual audit
+→ 💰 final cost closeout
+```
 
-## 16. What should remain after closeout
+See `../runbooks/99-cleanup-runbook.md` for the operational sequence.
 
-Keep at zero/near-zero portfolio cost:
+## 🏁 Closeout Rule
 
-- source code,
-- Dockerfile,
-- tests,
-- runbooks,
-- ADRs,
-- screenshots/evidence,
-- measured cost closeout.
-
-Do not automatically retain:
-
-- RDS,
-- ALB,
-- running tasks,
-- public IPv4,
-- ECR images.
-
-Phase 03 AMI/snapshot/S3 retention will be reconsidered only after Phase 05 proves the application can be rebuilt from source/container artifacts.
-
-## 17. Change-control rule
-
-This plan is frozen for execution. A change is allowed only when one of these is true:
-
-1. live AWS account/service preflight exposes a real restriction,
-2. recovered application source exposes a technical dependency not knowable beforehand,
-3. measured container performance proves the initial task size insufficient,
-4. an AWS service/API constraint invalidates a planned step.
-
-Any change must be documented as an ADR or execution note rather than silently rewriting the story.
+Phase 05 is complete only after functionality, HA/self-healing, scaling, dependency failure/recovery, evidence, cost and destructive cleanup are all proven. Running resources alone are not success.
