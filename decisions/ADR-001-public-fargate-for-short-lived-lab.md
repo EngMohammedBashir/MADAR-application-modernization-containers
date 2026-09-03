@@ -1,46 +1,41 @@
 # 🧠 ADR-001 — Public Fargate for the Short-Lived Lab
 
-**Status:** ✅ Accepted for Phase 05 lab  
-**Decision date:** 2026-08-27
+**Status:** ✅ Accepted → Executed → Cleaned up  
+**Decision date:** 2026-08-27 · **Outcome recorded:** 2026-09-03
 
 ## 🎯 Context
 
-Fargate tasks must pull images from ECR and deliver startup/runtime traffic such as CloudWatch Logs and Secrets Manager access.
-
-Three patterns were considered:
-
-1. 🔒 private subnets + NAT Gateway,
-2. 🔐 private subnets + VPC endpoints,
-3. 🌍 public subnets + `assignPublicIp=ENABLED` with strict Security Groups.
+Fargate needed outbound access to ECR, Secrets Manager and CloudWatch. I compared: private subnets + NAT, private subnets + VPC endpoints, or public subnets + public IPv4 with strict SG ingress.
 
 ## ✅ Decision
 
-Use option **3** for the short-lived Phase 05 lab.
+For this short-lived cost-controlled lab, I used public Fargate ENIs with `assignPublicIp=ENABLED` while allowing application ingress only from `ALB-SG` to `ECS-SG:8080`.
 
 ```text
-🌍 Internet → 🛡️ ALB-SG → 🛡️ ECS-SG
-
-🚫 Direct Internet → ECS-SG = denied
+🌍 Internet → ⚖️ ALB → 🛡️ ECS-SG:8080
+🌍 Internet ─X→ ECS-SG:8080
 ```
 
-Tasks can initiate outbound connections through the Internet Gateway while direct application ingress remains restricted to the ALB security group.
+## 💡 Why I Chose It
 
-## 💡 Why
+- 💰 avoided NAT Gateway hourly/data-processing cost;
+- 🧩 avoided adding multiple interface endpoints for a short validation window;
+- 🎯 kept focus on container modernization, ALB, Fargate, `awsvpc` and SG-to-SG controls;
+- 🧪 synthetic-data lab was destroyed after testing.
 
-- 💰 avoids NAT Gateway hourly/data-processing cost,
-- 💰 avoids multiple paid interface endpoints for a lab measured in hours,
-- 🧩 reduces setup complexity,
-- 🎯 still demonstrates ALB, ECS service networking, `awsvpc`, SG-to-SG rules and target type `ip`,
-- 🐳 keeps the portfolio focus on application modernization rather than private-service networking plumbing.
+## 🧪 Observed Outcome
+
+A manual Fargate task received a public IPv4, but direct Internet access to `:8080` timed out because ECS-SG allowed only ALB-SG. I treated that timeout as a successful security-boundary test, not an application failure. End-to-end access through the ALB worked.
 
 ## ⚖️ Consequences
 
-- 🌐 each active Fargate task may incur public IPv4 cost,
-- 🌍 tasks have Internet-routable ENIs even though Security Groups block direct inbound application access,
-- 🚫 this is **not** presented as the preferred production network design.
+- active tasks could incur public IPv4 cost;
+- task ENIs were Internet-routable at the network layer;
+- SGs carried more responsibility for ingress isolation;
+- this design is **not** my production recommendation.
 
 ## 🏭 Production Recommendation
 
-Use private Fargate subnets with controlled egress based on actual workload requirements, using NAT and/or VPC endpoints where justified.
+Use private Fargate tasks with controlled egress, selecting NAT and/or VPC endpoints based on traffic, cost and security requirements.
 
-> 🧠 **Portfolio takeaway:** the lab architecture is a deliberate cost/complexity trade-off, not an accidental security shortcut.
+> 🧠 **What I learned:** a cheaper lab architecture can still be intentional and defensible when its risk boundary is explicit, tested and removed after use.
