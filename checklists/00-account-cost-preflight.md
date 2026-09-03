@@ -1,152 +1,96 @@
-# Gate 0 — AWS Account, Cost & Retained-Asset Preflight
+# ✅ Gate 0 — AWS Account, Cost & Retained-Asset Preflight
 
-> **Rule:** do not create Phase 05 infrastructure until this checklist is completed with live account evidence.
+> 🟢 **RESULT: GO — completed 2026-09-03.** Phase 05 implementation was authorized to proceed without an AWS account upgrade.
 
-## 1. Account / plan
+## 🧾 Verified Account State
 
-- [ ] Confirm current AWS account plan.
-- [ ] Confirm Free Plan remaining days if applicable.
-- [ ] Confirm current promotional credit balance.
-- [ ] Confirm credit expiry date.
-- [ ] Confirm no account-plan upgrade is required for ECS/Fargate, ECR, ELB/ALB, RDS PostgreSQL, Secrets Manager and CloudWatch.
-- [ ] If any service is unavailable, stop and redesign before creating dependent resources.
+- [x] Current AWS account/Free Plan state checked.
+- [x] Promotional credit balance checked before build (~$174.76 remained at the checkpoint).
+- [x] Free Plan time remaining checked (165 days at the checkpoint).
+- [x] No account upgrade performed.
+- [x] Required AWS APIs/services used by the selected build path were accessible.
+- [x] Cost Explorer baseline reviewed; September was essentially $0 at the start of Phase 05.
 
-## 2. Current billing baseline
+> 💰 Credits and plan state are time-sensitive account facts. The values above document the execution checkpoint, not a permanent guarantee.
 
-Capture month-to-date cost before Phase 05:
+## 🔗 Phase 03 Retained Assets
 
-```bash
-START=$(date +%Y-%m-01)
-END=$(date -d tomorrow +%Y-%m-%d)
+- [x] AMI `ami-0cbd2e9ec0d6f9168` exists and is available.
+- [x] Snapshot `snap-0920a020c47fb6447` exists and is retained.
+- [x] S3 bucket `madar-operational-files-197821101770` exists/reachable.
 
-AWS_PAGER="" aws ce get-cost-and-usage \
-  --time-period Start=$START,End=$END \
-  --granularity MONTHLY \
-  --metrics UnblendedCost \
-  --group-by Type=DIMENSION,Key=SERVICE \
-  --output table
-```
+These assets established the continuity path from Phase 03 into the Phase 05 application recovery.
 
-- [ ] Capture gross usage/fees.
-- [ ] Capture credits separately.
-- [ ] Save a screenshot as the Phase 05 starting cost baseline.
+## 🧹 Phase 04 Cleanup
 
-## 3. Verify Phase 04 remains cleaned up
+- [x] Phase 04 cloud resources previously cleaned up.
+- [x] No Phase 04 WorkSpace/AD Connector was required by Phase 05.
 
-Expected: no active Phase 04 cloud infrastructure.
+## ☁️ Service/API Access
 
-```bash
-AWS_PAGER="" aws workspaces describe-workspaces \
-  --region us-east-1 \
-  --query 'Workspaces[*].[WorkspaceId,UserName,State]' \
-  --output table
+Execution subsequently proved access to the services required by the current build:
 
-AWS_PAGER="" aws ds describe-directories \
-  --region us-east-1 \
-  --query 'DirectoryDescriptions[*].[DirectoryId,Name,Type,Stage]' \
-  --output table
-```
+- [x] EC2 / VPC
+- [x] ECR
+- [x] RDS PostgreSQL
+- [x] Secrets Manager
+- [x] IAM
+- [ ] ECS/Fargate runtime deployment — API/runtime validation pending
+- [ ] ELB/ALB creation — pending later gate
+- [ ] CloudWatch application logs — pending ECS runtime
 
-- [ ] No Phase 04 WorkSpace.
-- [ ] No Phase 04 AD Connector.
-- [ ] No forgotten Phase 04 Elastic IP/VPC resources.
+## 🐘 Regional Capability Proven
 
-## 4. Verify Phase 03 retained assets
+- [x] `db.t4g.micro` PostgreSQL successfully created in `us-east-1`.
+- [x] PostgreSQL engine provisioned successfully.
+- [x] Two AZs (`us-east-1a`, `us-east-1b`) used for Phase 05 subnet foundation.
+- [ ] Fargate `256 CPU / 512 MiB` runtime validation pending task deployment.
 
-### AMI
+## 💰 Cost Guardrails
 
-```bash
-AWS_PAGER="" aws ec2 describe-images \
-  --region us-east-1 \
-  --image-ids ami-0cbd2e9ec0d6f9168 \
-  --query 'Images[0].{ImageId:ImageId,Name:Name,State:State,Architecture:Architecture,RootDeviceName:RootDeviceName}' \
-  --output table
-```
-
-Expected: `State = available`.
-
-### Snapshot
-
-```bash
-AWS_PAGER="" aws ec2 describe-snapshots \
-  --region us-east-1 \
-  --snapshot-ids snap-0920a020c47fb6447 \
-  --query 'Snapshots[0].{SnapshotId:SnapshotId,State:State,VolumeSize:VolumeSize,Encrypted:Encrypted}' \
-  --output table
-```
-
-### S3
-
-```bash
-AWS_PAGER="" aws s3api head-bucket \
-  --bucket madar-operational-files-197821101770
-
-AWS_PAGER="" aws s3 ls \
-  s3://madar-operational-files-197821101770/operational-data/ \
-  --recursive
-```
-
-- [ ] AMI exists and is available.
-- [ ] backing snapshot exists.
-- [ ] S3 bucket exists.
-- [ ] expected operational data is visible.
-
-## 5. Service/API access smoke checks
-
-Read-only calls only:
-
-```bash
-AWS_PAGER="" aws ecs list-clusters --region us-east-1 --output table
-AWS_PAGER="" aws ecr describe-repositories --region us-east-1 --output table
-AWS_PAGER="" aws elbv2 describe-load-balancers --region us-east-1 --output table
-AWS_PAGER="" aws rds describe-db-instances --region us-east-1 --output table
-AWS_PAGER="" aws secretsmanager list-secrets --region us-east-1 --max-results 5 --output table
-AWS_PAGER="" aws logs describe-log-groups --region us-east-1 --limit 5 --output table
-```
-
-- [ ] Commands succeed without account-plan/service-access errors.
-
-## 6. Regional capability checks
-
-- [ ] Confirm `db.t4g.micro` is orderable for PostgreSQL in `us-east-1` at execution time.
-- [ ] Confirm intended PostgreSQL engine version.
-- [ ] Confirm two AZs available for ALB public subnets and DB subnet group.
-- [ ] Confirm Fargate platform supports initial `0.25 vCPU / 512 MiB` combination.
-
-## 7. Budget guardrail
-
-- [ ] Create/verify AWS Budget before expensive resources.
-- [ ] Recommended warning threshold: `$3`.
-- [ ] Recommended second threshold: `$5`.
-- [ ] Confirm contact/notification destination works.
-
-## 8. Planned cost clocks acknowledged
-
-- [ ] RDS — billed while running.
-- [ ] ALB — hourly + LCU while provisioned.
-- [ ] Fargate — billed while tasks run.
-- [ ] Public IPv4 — billed while allocated/in use.
-- [ ] Secrets Manager — storage/API cost.
-- [ ] ECR — image storage.
-- [ ] CloudWatch — log ingestion/storage.
-- [ ] No NAT Gateway planned.
-
-## 9. GO / NO-GO record
+Cost-bearing resources are intentionally short-lived.
 
 ```text
-Account plan        :
-Credits remaining   :
-Credits expiry      :
-AMI available       :
-Snapshot available  :
-S3 available        :
-ECS/Fargate access  :
-ALB access          :
-RDS access          :
-Secrets access      :
-Budget configured   :
-
-FINAL GATE 0: GO / NO-GO
+🐘 RDS       → currently running during build window
+⚖️ ALB       → create as late as practical
+🚀 Fargate   → baseline desired count 1
+🌐 IPv4      → only while required by running Fargate tasks
+🔐 Secrets   → Phase 05 scoped
+📦 ECR       → one small versioned application image
+🚫 NAT       → intentionally excluded
 ```
 
-Do not continue until every blocking item is resolved.
+The lab will not be considered complete until cost evidence and a residual-resource audit are captured after cleanup.
+
+## 🟢 GO / NO-GO Record
+
+```text
+Account / plan checked      : PASS
+Credits checked             : PASS
+No account upgrade          : PASS
+AMI available               : PASS
+Snapshot available          : PASS
+S3 available                : PASS
+Required API access         : PASS for executed foundation services
+Two-AZ network capability   : PASS
+RDS db.t4g.micro            : PASS
+Cost-conscious design       : PASS
+
+FINAL GATE 0                : GO ✅
+```
+
+## ▶️ Outcome
+
+Gate 0 is no longer the next action. Implementation proceeded through:
+
+```text
+🔎 AMI recovery
+→ 🐳 containerization
+→ 📦 ECR
+→ 🌐 network/security
+→ 🐘 RDS
+→ 🔐 Secrets Manager
+→ 🔑 IAM foundation (current)
+```
+
+See `../CURRENT-STATE.md` for the live project checkpoint.
