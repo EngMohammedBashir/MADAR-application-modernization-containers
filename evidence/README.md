@@ -1,102 +1,78 @@
 # 📸 Phase 05 — Evidence Index
 
-> 🟢 Screenshots are kept in this single `evidence/` directory and are included only when they support an engineering claim. No passwords, access keys, tokens, private keys or secret values belong here.
+> 🟢 **Evidence set COMPLETE.** Screenshots are included only when they support an engineering claim. No passwords, keys, tokens, private keys or secret values belong here.
 
-## 🔎 Legacy Recovery
-
-| File | Proof |
+## 🔎 Recovery
+| Evidence | Claim |
 |---|---|
-| `recovery-ec2-legacy-app-discovered.png` | Retained Phase 03 AMI recovered and Flask workload identified |
-| `recovery-resources-cleaned-up.png` | Temporary recovery EC2/EBS/SG cleanup verified |
-| `legacy-database-dump-recovered.png` | Authoritative PostgreSQL custom dump recovered from retained Phase 03 snapshot |
+| `recovery-ec2-legacy-app-discovered.png` | Legacy Flask workload recovered from retained AMI |
+| `recovery-resources-cleaned-up.png` | Temporary recovery EC2/EBS/SG removed |
+| `legacy-database-dump-recovered.png` | Authoritative PostgreSQL dump recovered from retained snapshot |
 
-## 🐳 Containerization & ECR
-
-| File | Proof |
+## 🐳 Containers / ECR
+| Evidence | Claim |
 |---|---|
-| `docker-build-success.png` | Application Docker image built successfully |
-| `docker-container-health-success.png` | Local container and health behavior validated |
-| `ecr-image-push-success.png` | Application image pushed to private ECR |
-| `ecr-console-v1-verified.png` | Application `v1` image verified in ECR |
-| `MADAR-P05-Restore-Image-QA.png` | Temporary DB restore image contains required PostgreSQL/AWS tooling |
-| `MADAR-P05-ECR-Restore-Repository.png` | Restore ECR repository created |
-| `MADAR-P05-Restore-Image-Pushed.png` | Restore image `v1` published successfully |
+| `docker-build-success.png` | Application image built |
+| `docker-container-health-success.png` | Local container health/non-root behavior validated |
+| `ecr-image-push-success.png` | Application image pushed |
+| `ecr-console-v1-verified.png` | `v1` present in ECR during lab |
+| `MADAR-P05-Restore-Image-QA.png` | Restore image tooling validated |
+| `MADAR-P05-ECR-Restore-Repository.png` | Restore repository created |
+| `MADAR-P05-Restore-Image-Pushed.png` | Restore `v1` published |
 
-## 🌐 Networking & Security
-
-| File | Proof |
+## 🌐 Networking / Security
+| Evidence | Claim |
 |---|---|
-| `public-network-routing-validated.png` | Public subnet/IGW routing validated |
-| `security-group-chain-validated.png` | `Internet :80 → ALB → ECS :8080 → RDS :5432` SG chain validated |
+| `public-network-routing-validated.png` | Public routing/IGW path validated |
+| `security-group-chain-validated.png` | Internet→ALB→ECS→RDS SG chain validated |
 
-## 🚀 Fargate / Database / ALB
-
-| File | Proof |
+## 🚀 Runtime / Database / ALB
+| Evidence | Claim |
 |---|---|
-| `ecs-fargate-task-running.png` | Fargate runtime reached RUNNING and container execution was established |
-| `database-api-validation.png` | DB-backed application path validated through the deployed runtime |
-| `alb-healthy-fargate-target.png` | ALB target registered healthy |
-| `madar-dashboard-on-fargate.png` | MADAR dashboard rendered through the Fargate/ALB deployment |
+| `ecs-fargate-task-running.png` | Fargate runtime reached RUNNING |
+| `database-api-validation.png` | DB-backed application path worked |
+| `alb-healthy-fargate-target.png` | ALB target healthy |
+| `madar-dashboard-on-fargate.png` | Dashboard rendered through ALB/Fargate |
 
-The database restore task exited `0` and CloudWatch recorded `RESTORE COMPLETED SUCCESSFULLY`. A separate DB verification task also exited `0`. Exact row-count output is not claimed unless separately evidenced.
+Restore task exited `0` and logged `RESTORE COMPLETED SUCCESSFULLY`; verification task exited `0`. Exact row counts are not claimed without separate evidence.
 
-## ♻️ Reliability / Self-Healing
-
-| File | Proof |
+## ♻️ Reliability
+| Evidence | Claim |
 |---|---|
-| `ecs-two-healthy-fargate-targets.png` | Two healthy service targets established for the HA/failure test |
-| `ecs-task-self-healing.png` | Intentional task stop caused desired/running mismatch and replacement activity |
-| `ecs-self-healing-recovered.png` | ECS returned the service to the desired healthy state |
+| `ecs-two-healthy-fargate-targets.png` | Two healthy targets established |
+| `ecs-task-self-healing.png` | Intentional task failure/replacement activity |
+| `ecs-self-healing-recovered.png` | Service recovered desired healthy capacity |
+| `ecs-auto-scaling-triggered.png` | Target tracking automatically scaled desired count `1→2` |
 
-During the intentional task failure, the application remained available through the surviving target while ECS launched a replacement.
+⚠️ Automatic scale-out is proven. Separate scale-in is not claimed.
 
-## 📈 Auto Scaling
-
-| File | Proof |
+## 🔌 Dependency Failure
+| Evidence | Claim |
 |---|---|
-| `ecs-auto-scaling-triggered.png` | CloudWatch high alarm triggered the target-tracking policy and ECS desired count moved automatically from 1 to 2 |
+| `rds-dependency-failure.png` | With `5432` revoked: health `200`, ready `502` through ALB |
+| `rds-dependency-recovery.png` | After rule restore: health/ready `200` |
 
-For the controlled test only, the CPU target was temporarily lowered from 40% to 5%. CPU crossed the threshold for the required evaluation periods, the alarm entered `ALARM`, and Application Auto Scaling initiated scale-out. The policy was restored to **40%** afterward.
-
-**Claim boundary:** automatic **scale-out** is validated. This repository does not claim a separately evidenced automatic scale-in event.
-
-## 🔌 RDS Dependency Failure & Recovery
-
-| File | Proof |
-|---|---|
-| `rds-dependency-failure.png` | After revoking ECS→RDS TCP/5432, `/api/health` remained `200` while `/api/ready` returned `502` through the ALB |
-| `rds-dependency-recovery.png` | After restoring the SG rule, `/api/health` and `/api/ready` returned `200` |
-
-The observed `502` is recorded exactly as observed; it is not rewritten as the application's intended internal `503` response.
+The externally observed `502` is preserved exactly.
 
 ## 📊 Observability
-
-| File | Proof |
+| Evidence | Claim |
 |---|---|
-| `observability-infrastructure-health.png` | ECS service, ALB target health, private/available RDS and CloudWatch log streams viewed together |
-| `observability-cloudwatch-metrics.png` | ECS CPU/memory, ALB request and RDS connection metrics captured from CloudWatch |
+| `observability-infrastructure-health.png` | ECS/ALB/RDS/log-stream state |
+| `observability-cloudwatch-metrics.png` | ECS CPU/memory, ALB requests, RDS connections |
 
-## 💰 Cost
-
-| File | Proof |
+## 💰 Cost & Closeout
+| Evidence | Claim |
 |---|---|
-| `phase05-cost-checkpoint.png` | Cost Explorer checkpoint showed negligible/~$0.00 visible usage for the captured period |
+| `phase05-cost-checkpoint.png` | Pre-cleanup Cost Explorer checkpoint |
+| `Cost-Closeout-Evidence.png` | Final available cost closeout checkpoint after teardown |
+| `phase05-residual-audit.png` | Phase 05 runtime resources reported deleted while retained assets remained available |
 
-Cost Explorer can lag. This screenshot is a checkpoint, not a guarantee that final settled cost is exactly zero.
+> 💰 Cost Explorer can lag; cost images are billing checkpoints, not promises of final settled zero cost.
 
-## ⏳ Evidence Still Required
+## 🧠 Reviewer Reading Order
 
-Only final closeout evidence remains:
+For the fastest proof trail: `madar-dashboard-on-fargate.png` → `ecs-task-self-healing.png` → `ecs-self-healing-recovered.png` → `ecs-auto-scaling-triggered.png` → `rds-dependency-failure.png` → `rds-dependency-recovery.png` → `observability-cloudwatch-metrics.png` → `phase05-residual-audit.png` → `Cost-Closeout-Evidence.png`.
 
-```text
-phase05-final-cleanup.png
-phase05-residual-audit.png
-```
+## 🛡️ Evidence Rule
 
-The residual audit must check ECS, ALB/TG, RDS/subnet group, Phase 05 VPC/network resources, ECR, Secrets Manager, CloudWatch Logs, IAM roles and public IPv4/ENIs as applicable.
-
-## 🧠 Evidence Rule
-
-A screenshot belongs here only if it supports a reviewer-relevant claim:
-
-**architecture • security • functionality • recovery • failure behavior • scaling • observability • cost • cleanup**.
+A screenshot belongs here only when it proves **architecture • security • functionality • recovery • failure behavior • scaling • observability • cost • cleanup**. Decorative screenshots and duplicate proof should be omitted.
