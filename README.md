@@ -76,6 +76,10 @@ Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Ph
 | 🛣️ Public RT | `rtb-076fdacedac35cd66` | `0.0.0.0/0 → IGW` | ✅ |
 | 🔐 Private RT | `rtb-0ed3daeca13e9987e` | local route only | ✅ |
 
+<p align="center">
+  <img src="evidence/public-network-routing-validated.png" width="900" alt="Phase 05 public network routing validated" />
+</p>
+
 > 🧠 **Routing decides where traffic can go. Security Groups decide who may talk to whom and on which port.**
 
 ---
@@ -100,6 +104,23 @@ Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Ph
 ✅ PostgreSQL ingress is allowed only from `ECS-SG`.  
 ✅ RDS is not publicly accessible.  
 ✅ No NAT Gateway is used in this cost-controlled lab.
+
+<p align="center">
+  <img src="evidence/security-group-chain-validated.png" width="900" alt="Security group chain validated" />
+</p>
+
+---
+
+## 🔎 Legacy Recovery — Completed
+
+The retained Phase 03 AMI was used only as a temporary recovery source to locate and safely extract the existing Flask workload. Recovery compute was then removed.
+
+<table>
+<tr>
+<td width="50%" align="center"><b>🔎 Legacy application discovered</b><br><br><img src="evidence/recovery-ec2-legacy-app-discovered.png" width="100%" alt="Legacy application discovered on recovery EC2" /></td>
+<td width="50%" align="center"><b>🧹 Recovery resources cleaned</b><br><br><img src="evidence/recovery-resources-cleaned-up.png" width="100%" alt="Recovery resources cleaned up" /></td>
+</tr>
+</table>
 
 ---
 
@@ -127,6 +148,13 @@ Local validation proved:
 👤 non-root UID 1000        ✅
 ```
 
+<table>
+<tr>
+<td width="50%" align="center"><b>🐳 Docker build success</b><br><br><img src="evidence/docker-build-success.png" width="100%" alt="Docker image build success" /></td>
+<td width="50%" align="center"><b>❤️ Container health validation</b><br><br><img src="evidence/docker-container-health-success.png" width="100%" alt="Docker container health success" /></td>
+</tr>
+</table>
+
 The liveness/readiness split is intentional: a database outage should not cause ECS to continuously replace otherwise healthy application containers.
 
 ---
@@ -143,6 +171,13 @@ Encryption : AES256
 ```
 
 The image is now stored in AWS and can be pulled directly by ECS/Fargate; the local Docker runtime is no longer required for deployment.
+
+<table>
+<tr>
+<td width="50%" align="center"><b>📤 ECR push success</b><br><br><img src="evidence/ecr-image-push-success.png" width="100%" alt="ECR image push success" /></td>
+<td width="50%" align="center"><b>🏷️ ECR v1 verified</b><br><br><img src="evidence/ecr-console-v1-verified.png" width="100%" alt="ECR version 1 verified in console" /></td>
+</tr>
+</table>
 
 ---
 
@@ -258,22 +293,30 @@ Database credentials live outside source and container layers. ECS will receive 
 
 ---
 
-## 📸 Evidence
+## 📸 Evidence Gallery
 
-Evidence is intentionally captured at engineering milestones rather than after every command.
+> Every image below is committed under `evidence/` and supports a concrete engineering claim.
 
-| Evidence | What it proves |
-|---|---|
-| 🔎 `recovery-ec2-legacy-app-discovered.png` | Existing Phase 03 workload recovered |
-| 🧹 `recovery-resources-cleaned-up.png` | Temporary recovery infrastructure removed |
-| 🐳 `docker-build-success.png` | Container image built successfully |
-| ❤️ `docker-container-health-success.png` | Local runtime/liveness validation |
-| 📦 `ecr-image-push-success.png` | Versioned image published |
-| 🏷️ `ecr-console-v1-verified.png` | ECR tag/digest verified |
-| 🌐 `public-network-routing-validated.png` | Public network routing validated |
-| 🛡️ `security-group-chain-validated.png` | Internet → ALB → ECS → RDS least-access chain |
+<table>
+<tr>
+<td width="50%" align="center"><b>🔎 Recovery</b><br><br><img src="evidence/recovery-ec2-legacy-app-discovered.png" width="100%" /></td>
+<td width="50%" align="center"><b>🧹 Recovery Cleanup</b><br><br><img src="evidence/recovery-resources-cleaned-up.png" width="100%" /></td>
+</tr>
+<tr>
+<td width="50%" align="center"><b>🐳 Docker Build</b><br><br><img src="evidence/docker-build-success.png" width="100%" /></td>
+<td width="50%" align="center"><b>❤️ Container Health</b><br><br><img src="evidence/docker-container-health-success.png" width="100%" /></td>
+</tr>
+<tr>
+<td width="50%" align="center"><b>📦 ECR Push</b><br><br><img src="evidence/ecr-image-push-success.png" width="100%" /></td>
+<td width="50%" align="center"><b>🏷️ ECR v1</b><br><br><img src="evidence/ecr-console-v1-verified.png" width="100%" /></td>
+</tr>
+<tr>
+<td width="50%" align="center"><b>🌐 Network Routing</b><br><br><img src="evidence/public-network-routing-validated.png" width="100%" /></td>
+<td width="50%" align="center"><b>🛡️ Security Chain</b><br><br><img src="evidence/security-group-chain-validated.png" width="100%" /></td>
+</tr>
+</table>
 
-➡️ Full index: [`evidence/README.md`](evidence/README.md)
+➡️ Full evidence roadmap: [`evidence/README.md`](evidence/README.md)
 
 ---
 
