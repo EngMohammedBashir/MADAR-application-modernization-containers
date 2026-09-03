@@ -1,152 +1,186 @@
-# Phase 05 Evidence Index
+# 📸 Phase 05 — Evidence Index
 
-> No execution screenshots are claimed yet. This file defines the evidence we must capture during the build.
+> 🟢 **Live evidence repository.** Screenshots are captured only at meaningful engineering milestones. Never commit passwords, access keys, tokens, secret values, private keys or sensitive console output.
 
-## Gate 0 — account / cost baseline
+## 🗂️ Current Evidence
 
-Planned evidence:
+All screenshots currently live in this single `evidence/` directory. They are indexed here by engineering stage so the repository stays easy to review even without nested folders.
 
-- current account plan / credit balance,
-- cost baseline before Phase 05,
-- retained AMI available,
-- retained snapshot available,
-- retained S3 operational data visible,
-- Phase 04 resources still absent.
+### 🔎 01 — Legacy Recovery
 
-## Legacy recovery
+| File | Proof |
+|---|---|
+| `recovery-ec2-legacy-app-discovered.png` | 🔎 Retained Phase 03 AMI successfully recovered and the existing Flask workload identified |
+| `recovery-resources-cleaned-up.png` | 🧹 Temporary recovery EC2/EBS/security group cleanup verified |
+
+### 🐳 02 — Containerization
+
+| File | Proof |
+|---|---|
+| `docker-build-success.png` | 🏗️ Docker image built successfully |
+| `docker-container-health-success.png` | ❤️ Local container started and application health endpoint passed |
+
+Additional validated facts recorded in project docs: Gunicorn runtime, port `8080`, non-root `madar` user and separate liveness/readiness behavior.
+
+### 📦 03 — Amazon ECR
+
+| File | Proof |
+|---|---|
+| `ecr-image-push-success.png` | 🚀 Docker image push to private ECR succeeded |
+| `ecr-console-v1-verified.png` | 🏷️ `v1` image index/tag/digest visible in ECR |
+
+### 🌐 04 — Networking
+
+| File | Proof |
+|---|---|
+| `public-network-routing-validated.png` | 🌍 Phase 05 VPC public routing, two public subnets and IGW path validated |
+
+Private routing is recorded in `CURRENT-STATE.md`: `Private-A` and `Private-B` use the dedicated private route table with local-only routing and no NAT Gateway.
+
+### 🛡️ 05 — Security
+
+| File | Proof |
+|---|---|
+| `security-group-chain-validated.png` | 🛡️ `Internet :80 → ALB-SG → :8080 ECS-SG → :5432 RDS-SG` validated |
+
+This proves ECS and RDS do not accept direct Internet ingress.
+
+---
+
+## 📷 Evidence Still To Capture
+
+### 🐘 RDS / Secrets
+
+Capture one clean view proving:
+
+```text
+PostgreSQL available
+PubliclyAccessible = false
+DB subnet group = private subnets
+Single-AZ / db.t4g.micro / 20 GB gp3
+RDS-SG attached
+```
+
+Suggested filename:
+
+`rds-private-postgres-validated.png`
+
+Do **not** reveal the Secrets Manager secret value.
+
+### 🔑 IAM / ECS Task Definition
 
 Capture:
 
-- temporary EC2 launched from retained AMI,
-- Flask application path/runtime identified,
-- service/start command identified,
-- safe source extracted,
-- temporary recovery EC2 terminated.
-
-Do not screenshot or commit passwords/credentials.
-
-## Containerization
-
-Capture:
-
-- successful Docker build,
-- final image size,
-- non-root runtime identity,
-- local `/api/health` response,
-- local functional application response,
-- absence of secrets from committed files.
-
-## ECR
-
-Capture:
-
-- repository,
-- image tag,
-- image digest,
-- push success.
-
-## RDS / security
-
-Capture:
-
-- PostgreSQL engine/class,
-- Single-AZ,
-- `PubliclyAccessible = false`,
-- private DB subnet group,
-- RDS-SG inbound 5432 from ECS-SG only,
-- deletion protection disabled for temporary lab.
-
-## ECS / Fargate
-
-Capture:
-
+- ECS execution role,
 - task definition CPU/memory,
 - `awsvpc`,
-- image URI/digest,
-- execution role/task role distinction,
+- ECR `v1` image,
 - `awslogs`,
-- task running,
-- public-IP-enabled lab networking without direct Internet ingress.
+- secret injection configuration without values.
 
-## ALB
+Suggested filename:
+
+`ecs-task-definition-security-validated.png`
+
+### 🚀 Initial Fargate Runtime
 
 Capture:
 
-- ALB spans two subnets/AZs,
+- task `RUNNING`,
+- image pull success,
+- CloudWatch log stream,
+- task networking/security group.
+
+Suggested filename:
+
+`ecs-fargate-task-running.png`
+
+### 🗃️ Database Functionality
+
+Capture a deterministic DB-backed MADAR API response proving Flask → PostgreSQL connectivity.
+
+Suggested filename:
+
+`database-api-validation.png`
+
+### ⚖️ ALB
+
+Capture:
+
+- ALB across both public AZs,
 - target group type `ip`,
-- healthy Fargate task target(s),
-- `/api/health` via ALB DNS.
+- healthy Fargate target,
+- `/api/health` response through ALB DNS.
 
-## Database functionality
+Suggested filename:
 
-Capture a DB-backed API response showing deterministic MADAR data from PostgreSQL.
+`alb-healthy-fargate-target.png`
 
-## Self-healing
+### ♻️ Self-Healing
 
-Capture sequence:
+Capture the sequence:
 
 ```text
 2 healthy tasks
-→ stop one task intentionally
-→ service sees desired-count mismatch
+→ intentionally stop one
+→ desired-count mismatch
 → replacement task starts
 → target becomes healthy
 → desired count restored
 ```
 
-Prefer screenshots with timestamps/task IDs.
+Suggested filename:
 
-## Auto Scaling
+`ecs-task-self-healing.png`
 
-Capture:
+### 📈 Auto Scaling
 
-- baseline task count/CPU,
-- target tracking policy,
-- load generation,
-- CPU threshold crossing,
-- scale-out,
-- new target healthy,
-- scale-in after load ends.
+Capture baseline, target tracking, controlled load, CPU threshold crossing, scale-out and scale-in.
 
-## Dependency failure / recovery
+Suggested filename:
+
+`ecs-auto-scaling-validated.png`
+
+### 🔌 Dependency Failure / Recovery
 
 Capture:
 
 ```text
-ECS→RDS 5432 allowed   → DB endpoint works
-rule removed           → DB readiness/function fails
+ECS→RDS :5432 allowed  → DB works
+rule revoked           → readiness/DB call fails
 rule restored          → functionality recovers
 ```
 
-The application liveness endpoint should remain healthy if the application process itself is running.
+Suggested filename:
 
-## Cleanup / cost
+`rds-dependency-failure-recovery.png`
 
-Final evidence must prove:
+### 📊 Observability
 
-- ECS service/tasks removed,
-- ALB/target group removed,
-- RDS removed,
-- public IPv4/NAT residuals absent,
-- Phase 05 VPC removed,
-- ECR/secret/log-group cleanup decision recorded,
-- final Cost Explorer checkpoint captured.
+Capture meaningful CloudWatch/ECS/ALB/RDS metrics and logs used during validation.
 
-## Naming convention
+Suggested filename:
 
-Use readable names such as:
+`observability-validation.png`
+
+### 💰🧹 Cost & Cleanup
+
+Final evidence must prove cost checkpoint plus removal of ECS service/tasks, ALB/TG, RDS, secret/log decision, ECR cleanup decision, SGs, subnets/routes/IGW/VPC and residual-resource audit.
+
+Suggested filenames:
 
 ```text
-phase05-account-cost-preflight.png
-phase05-legacy-ami-recovery.png
-phase05-docker-local-validation.png
-phase05-ecr-image-published.png
-phase05-private-rds-security.png
-phase05-ecs-fargate-running.png
-phase05-alb-healthy-targets.png
-phase05-database-api-validation.png
-phase05-task-self-healing.png
-phase05-auto-scaling.png
-phase05-rds-dependency-failure-recovery.png
-phase05-final-cleanup-cost-closeout.png
+phase05-cost-checkpoint.png
+phase05-final-cleanup.png
+phase05-residual-audit.png
 ```
+
+---
+
+## 🧠 Evidence Rule
+
+A screenshot belongs here only if it supports a claim a reviewer would care about:
+
+**architecture • security • functionality • failure behavior • scaling • observability • cost • cleanup**.
+
+Routine command output does not need a screenshot.
