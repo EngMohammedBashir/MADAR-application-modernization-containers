@@ -2,28 +2,26 @@
 
 ### 🧭 Phase 05 of the MADAR Cloud Transformation
 
-![Status](https://img.shields.io/badge/STATUS-IN%20PROGRESS-f59e0b?style=for-the-badge) ![AWS](https://img.shields.io/badge/AWS-us--east--1-232F3E?style=for-the-badge&logo=amazonaws) ![Docker](https://img.shields.io/badge/Docker-Validated-2496ED?style=for-the-badge&logo=docker) ![ECR](https://img.shields.io/badge/ECR-v1%20Published-FF9900?style=for-the-badge) ![RDS](https://img.shields.io/badge/RDS-Available-527FFF?style=for-the-badge&logo=postgresql)
+![Status](https://img.shields.io/badge/STATUS-VALIDATED%20%7C%20CLEANUP%20NEXT-f59e0b?style=for-the-badge) ![AWS](https://img.shields.io/badge/AWS-us--east--1-232F3E?style=for-the-badge&logo=amazonaws) ![Docker](https://img.shields.io/badge/Docker-Validated-2496ED?style=for-the-badge&logo=docker) ![ECS](https://img.shields.io/badge/ECS-Fargate-FF9900?style=for-the-badge) ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RDS-4169E1?style=for-the-badge&logo=postgresql)
 
-> 🟢 **LIVE BUILD IN PROGRESS** — Gate 0 passed, the legacy Flask application was recovered from the retained Phase 03 AMI, modernized into a non-root Docker image, validated locally, published to Amazon ECR, and the Phase 05 network/security/private PostgreSQL foundation is now live. IAM/ECS foundation is the current workstream.
+> 🟠 **BUILD & VALIDATION COMPLETE — CLEANUP NEXT.** The same MADAR workload previously migrated in Phase 03 has now been recovered, containerized, restored onto a private PostgreSQL data layer, deployed behind an ALB on ECS Fargate, and tested for self-healing, automatic scale-out, database dependency failure/recovery and observability.
 
 ---
 
 ## 🎯 Mission
 
-Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Phase 03. The engineering goal is to separate the Flask application from its VM/operating-system runtime and move it into a portable, stateless container architecture on **Amazon ECS with AWS Fargate**.
+Phase 05 moves MADAR from **“the application lives inside a VM”** to **“the application is a portable, stateless container workload.”** The focus is runtime modernization and operational behavior—not CI/CD, Kubernetes or IaC.
 
 ```text
-🖥️ Retained Phase 03 AMI
+🖥️ Phase 03 retained AMI / snapshot
         ↓
-🔎 Temporary Recovery EC2
-        ↓
-🐍 Existing Flask Application
+🔎 Recover Flask source + PostgreSQL dump
         ↓
 🐳 Docker + Gunicorn + non-root runtime
         ↓
-📦 Amazon ECR : v1
+📦 Amazon ECR
         ↓
-🚀 Amazon ECS / AWS Fargate        ← CURRENT BUILD AREA
+🚀 ECS Service / AWS Fargate
         ↓
 ⚖️ Application Load Balancer
         ↓
@@ -32,7 +30,7 @@ Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Ph
 
 ---
 
-## 🏗️ Target Architecture
+## 🏗️ Validated Architecture
 
 ```text
                               🌍 INTERNET
@@ -54,37 +52,32 @@ Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Ph
                                   ▼
                          ┌──────────────────┐
                          │ 🐘 RDS PostgreSQL│
-                         │ Private subnet   │
+                         │ Private subnets  │
                          │ db.t4g.micro     │
                          │ Single-AZ        │
                          └──────────────────┘
 
-📦 ECR → container image     🔐 Secrets Manager → DB credentials
-📊 CloudWatch → logs/metrics 🛡️ SG chain → ALB → ECS → RDS
+📦 ECR → images          🔐 Secrets Manager → DB credentials
+📊 CloudWatch → telemetry 🛡️ SG chain → ALB → ECS → RDS
 ```
 
-### 🌐 Live network
+### 🌐 Network
 
-| Layer | Resource | Configuration | State |
-|---|---|---|---|
-| 🏠 VPC | `MADAR-P05-VPC` | `10.60.0.0/16` | ✅ |
-| 🌍 Public-A | `subnet-024a57f44c014ab2a` | `10.60.1.0/24` · us-east-1a | ✅ |
-| 🌍 Public-B | `subnet-0726ef657d0ab0ca5` | `10.60.2.0/24` · us-east-1b | ✅ |
-| 🔒 Private-A | `subnet-0ba1f1f304eec85cb` | `10.60.11.0/24` · us-east-1a | ✅ |
-| 🔒 Private-B | `subnet-0395c2043842856ce` | `10.60.12.0/24` · us-east-1b | ✅ |
-| 🚪 IGW | `igw-0df8ed399478fa879` | attached to Phase 05 VPC | ✅ |
-| 🛣️ Public RT | `rtb-076fdacedac35cd66` | `0.0.0.0/0 → IGW` | ✅ |
-| 🔐 Private RT | `rtb-0ed3daeca13e9987e` | local route only | ✅ |
+| Layer | Resource | Configuration |
+|---|---|---|
+| VPC | `MADAR-P05-VPC` | `10.60.0.0/16` |
+| Public-A | `subnet-024a57f44c014ab2a` | `10.60.1.0/24` · us-east-1a |
+| Public-B | `subnet-0726ef657d0ab0ca5` | `10.60.2.0/24` · us-east-1b |
+| Private-A | `subnet-0ba1f1f304eec85cb` | `10.60.11.0/24` · us-east-1a |
+| Private-B | `subnet-0395c2043842856ce` | `10.60.12.0/24` · us-east-1b |
+| IGW | `igw-0df8ed399478fa879` | public egress/ingress path |
+| Private routing | `rtb-0ed3daeca13e9987e` | local only / no NAT |
 
-<p align="center">
-  <img src="evidence/public-network-routing-validated.png" width="900" alt="Phase 05 public network routing validated" />
-</p>
-
-> 🧠 **Routing decides where traffic can go. Security Groups decide who may talk to whom and on which port.**
+<p align="center"><img src="evidence/public-network-routing-validated.png" width="900" alt="Phase 05 routing validation" /></p>
 
 ---
 
-## 🛡️ Security Chain
+## 🛡️ Security Boundary
 
 ```text
 🌍 0.0.0.0/0
@@ -99,224 +92,215 @@ Phase 05 modernizes the **same MADAR legacy workload** previously migrated in Ph
 🛡️ RDS-SG  sg-00ae439cb916d164b
 ```
 
-✅ ALB is the only Internet-facing application entry point.  
-✅ ECS application ingress is allowed only from `ALB-SG`.  
-✅ PostgreSQL ingress is allowed only from `ECS-SG`.  
-✅ RDS is not publicly accessible.  
-✅ No NAT Gateway is used in this cost-controlled lab.
+- ALB is the only Internet-facing application entry point.
+- ECS accepts application ingress only from the ALB security group.
+- RDS accepts PostgreSQL only from the ECS security group.
+- RDS is not publicly accessible.
+- No NAT Gateway was used in this cost-controlled lab.
 
-<p align="center">
-  <img src="evidence/security-group-chain-validated.png" width="900" alt="Security group chain validated" />
-</p>
+<p align="center"><img src="evidence/security-group-chain-validated.png" width="900" alt="Security group chain validation" /></p>
 
 ---
 
-## 🔎 Legacy Recovery — Completed
+## 🐳 Container Modernization
 
-The retained Phase 03 AMI was used only as a temporary recovery source to locate and safely extract the existing Flask workload. Recovery compute was then removed.
-
-<table>
-<tr>
-<td width="50%" align="center"><b>🔎 Legacy application discovered</b><br><br><img src="evidence/recovery-ec2-legacy-app-discovered.png" width="100%" alt="Legacy application discovered on recovery EC2" /></td>
-<td width="50%" align="center"><b>🧹 Recovery resources cleaned</b><br><br><img src="evidence/recovery-resources-cleaned-up.png" width="100%" alt="Recovery resources cleaned up" /></td>
-</tr>
-</table>
-
----
-
-## 🐳 Container Modernization — Completed
-
-The recovered Flask application was cleaned of VM-specific database assumptions and packaged using:
-
-- 🐍 `python:3.12-slim`
-- 🔫 Gunicorn with 2 workers
-- 👤 dedicated non-root `madar` user
-- 📌 pinned Python dependencies
-- 🧹 `.dockerignore`
-- 🔐 external database configuration
-- 📤 stdout/stderr logging
-- ❤️ `/api/health` for liveness
-- 🩺 `/api/ready` for database/dependency readiness
-
-Local validation proved:
+The recovered Flask application was cleaned of VM-specific database assumptions and packaged with `python:3.12-slim`, Gunicorn, pinned dependencies, a dedicated non-root `madar` user, stdout/stderr logging and external `MADAR_DB_*` configuration.
 
 ```text
-🐳 docker build             ✅
-🚀 container starts         ✅
-❤️ /api/health → 200        ✅
-🩺 /api/ready → 503 locally ✅ expected without PostgreSQL
-👤 non-root UID 1000        ✅
+/api/health → process/application liveness
+/api/ready  → PostgreSQL dependency readiness
 ```
 
-<table>
-<tr>
-<td width="50%" align="center"><b>🐳 Docker build success</b><br><br><img src="evidence/docker-build-success.png" width="100%" alt="Docker image build success" /></td>
-<td width="50%" align="center"><b>❤️ Container health validation</b><br><br><img src="evidence/docker-container-health-success.png" width="100%" alt="Docker container health success" /></td>
-</tr>
-</table>
+<table><tr>
+<td width="50%" align="center"><b>🐳 Docker build</b><br><br><img src="evidence/docker-build-success.png" width="100%" /></td>
+<td width="50%" align="center"><b>❤️ Local health validation</b><br><br><img src="evidence/docker-container-health-success.png" width="100%" /></td>
+</tr></table>
 
-The liveness/readiness split is intentional: a database outage should not cause ECS to continuously replace otherwise healthy application containers.
-
----
-
-## 📦 Amazon ECR — Completed
+Application image:
 
 ```text
-Repository : madar-phase05-app
-Image tag  : v1
-Region     : us-east-1
-Digest     : sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
-Scan push  : enabled
-Encryption : AES256
-```
-
-The image is now stored in AWS and can be pulled directly by ECS/Fargate; the local Docker runtime is no longer required for deployment.
-
-<table>
-<tr>
-<td width="50%" align="center"><b>📤 ECR push success</b><br><br><img src="evidence/ecr-image-push-success.png" width="100%" alt="ECR image push success" /></td>
-<td width="50%" align="center"><b>🏷️ ECR v1 verified</b><br><br><img src="evidence/ecr-console-v1-verified.png" width="100%" alt="ECR version 1 verified in console" /></td>
-</tr>
-</table>
-
----
-
-## 🐘 Private PostgreSQL — Live
-
-```text
-Identifier           madar-p05-postgres
-Engine               PostgreSQL 18.3
-Database             madar_legacy
-Class                db.t4g.micro
-Storage              20 GB gp3
-Deployment           Single-AZ
-Availability Zone    us-east-1a
-Publicly accessible  false 🔒
-Security Group       MADAR-P05-RDS-SG
-Status               available ✅
-```
-
-🔐 Database connection data is externalized in **AWS Secrets Manager** under `MADAR/Phase05/Postgres`; no password is committed to this repository or embedded in the container image.
-
-> ⚠️ Lab note: this temporary RDS instance currently reports storage encryption disabled. A production deployment should enable encryption at rest. The lab remains intentionally short-lived and will be destroyed after evidence collection.
-
----
-
-## 🔑 IAM / ECS Foundation — Current Step
-
-Created:
-
-```text
-MADAR-P05-ECS-ExecutionRole ✅
-Trust principal: ecs-tasks.amazonaws.com
-```
-
-Next, the role receives only the permissions required for ECR image pull, CloudWatch log delivery and injection of the specific Phase 05 database secret. Application runtime permissions remain separate through the ECS Task Role.
-
-```text
-Execution Role 🏗️ → infrastructure needs
-Task Role       🧑‍💻 → application AWS API needs
+Repository  madar-phase05-app
+Tag         v1
+Digest      sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
 ```
 
 ---
 
-## 🚦 Implementation Progress
+## 🗃️ Legacy Database Recovery & Controlled Restore
 
-| Gate | Workstream | Status |
-|---|---|---|
-| 🟢 0 | Account / credits / retained artifacts | ✅ PASS |
-| 🟢 1 | Legacy AMI recovery & safe source extraction | ✅ DONE |
-| 🟢 2 | Local Docker build & validation | ✅ DONE |
-| 🟢 3 | ECR repository + `v1` image publication | ✅ DONE |
-| 🟡 4 | VPC / RDS / Secrets / IAM / ECS foundation | 🔄 IN PROGRESS |
-| ⚪ 5 | ECS Service + ALB functional validation | ⏳ TODO |
-| ⚪ 6 | HA / self-healing / auto scaling | ⏳ TODO |
-| ⚪ 7 | Dependency failure + observability + cost evidence | ⏳ TODO |
-| ⚪ 8 | Destructive cleanup + residual audit | ⏳ TODO |
+A key Phase 05 discovery was that the retained S3 operational data did **not** contain the full PostgreSQL dump needed to recreate the legacy database. The retained Phase 03 EBS snapshot was inspected read-only using temporary infrastructure. The newer authoritative PostgreSQL custom dump was recovered and copied to:
+
+```text
+s3://madar-operational-files-197821101770/database-backups/madar_legacy_final.dump
+```
+
+A purpose-built restore container was published to `madar-p05-restore:v1`. Its task role could read **only that exact S3 object**. The one-off Fargate restore task exited `0` and CloudWatch logged `RESTORE COMPLETED SUCCESSFULLY`; a separate DB verification task also exited `0`.
+
+<table><tr>
+<td width="50%" align="center"><b>🗃️ Legacy dump recovered</b><br><br><img src="evidence/legacy-database-dump-recovered.png" width="100%" /></td>
+<td width="50%" align="center"><b>🧪 Restore image QA</b><br><br><img src="evidence/MADAR-P05-Restore-Image-QA.png" width="100%" /></td>
+</tr><tr>
+<td width="50%" align="center"><b>📦 Restore repository</b><br><br><img src="evidence/MADAR-P05-ECR-Restore-Repository.png" width="100%" /></td>
+<td width="50%" align="center"><b>📤 Restore image pushed</b><br><br><img src="evidence/MADAR-P05-Restore-Image-Pushed.png" width="100%" /></td>
+</tr></table>
+
+Temporary snapshot-inspection EC2/EBS/SG resources were deleted after recovery. The original retained Phase 03 snapshot remains intentionally preserved.
 
 ---
 
-## 🧪 Tests Still Required Before Completion
+## 🚀 ECS Fargate + ALB — End-to-End Success
 
 ```text
-🚀 Initial Fargate task reaches RUNNING
-📦 ECR image pull succeeds
-📊 Container logs arrive in CloudWatch
-🐘 ECS → RDS connectivity succeeds
-🗃️ Schema/test data initialized
-⚖️ ALB target becomes healthy
-❤️ /api/health works through ALB
-🩺 DB-backed endpoint returns expected data
-2️⃣ desiredCount=2 produces two healthy targets
-💥 stop one task → ECS replaces it
-📈 controlled load → scale out → scale in
-🔌 revoke ECS→RDS :5432 → dependency fails
-🔧 restore :5432 → application recovers
-💰 cost checkpoint captured
-🧹 all temporary Phase 05 infrastructure removed
-🔍 residual-resource audit passes
+Cluster       MADAR-P05-Cluster
+Service       MADAR-P05-App-Service
+Task def      madar-phase05-app:1
+ALB           MADAR-P05-ALB
+Target group  MADAR-P05-TG / target type ip
+Health path   /api/health
 ```
+
+Validated through the ALB:
+
+```text
+/api/health → HTTP 200
+/api/ready  → HTTP 200 / database connected
+Dashboard   → rendered successfully
+```
+
+<table><tr>
+<td width="50%" align="center"><b>🚀 Fargate running</b><br><br><img src="evidence/ecs-fargate-task-running.png" width="100%" /></td>
+<td width="50%" align="center"><b>⚖️ Healthy ALB target</b><br><br><img src="evidence/alb-healthy-fargate-target.png" width="100%" /></td>
+</tr><tr>
+<td width="50%" align="center"><b>🩺 Database API validation</b><br><br><img src="evidence/database-api-validation.png" width="100%" /></td>
+<td width="50%" align="center"><b>📊 MADAR dashboard on Fargate</b><br><br><img src="evidence/madar-dashboard-on-fargate.png" width="100%" /></td>
+</tr></table>
+
+---
+
+## ♻️ Self-Healing Test — PASS
+
+Desired count was temporarily raised to `2`. Two targets became healthy. One service task was intentionally stopped; ECS detected the desired/running mismatch, started a replacement, ALB drained the old target, and the application remained available through the surviving target. The service returned to desired healthy capacity.
+
+<table><tr>
+<td width="33%" align="center"><b>2️⃣ Two healthy targets</b><br><br><img src="evidence/ecs-two-healthy-fargate-targets.png" width="100%" /></td>
+<td width="33%" align="center"><b>💥 Failure injected</b><br><br><img src="evidence/ecs-task-self-healing.png" width="100%" /></td>
+<td width="33%" align="center"><b>♻️ Recovered</b><br><br><img src="evidence/ecs-self-healing-recovered.png" width="100%" /></td>
+</tr></table>
+
+---
+
+## 📈 Target-Tracking Auto Scaling — PASS
+
+Final policy:
+
+```text
+MinCapacity       1
+MaxCapacity       2
+Metric            ECSServiceAverageCPUUtilization
+TargetValue       40%
+Cooldowns         60s / 60s
+```
+
+For a controlled lab test only, the target was temporarily lowered to `5%`. Load drove service CPU above that threshold for the required evaluation periods. CloudWatch entered `ALARM`, triggered `MADAR-P05-CPU-TargetTracking`, and ECS automatically changed desired count from `1 → 2`. The target was restored to `40%` immediately afterward.
+
+<p align="center"><img src="evidence/ecs-auto-scaling-triggered.png" width="900" alt="ECS target tracking automatic scale-out" /></p>
+
+> **Claim boundary:** automatic **scale-out** is validated. This project does not claim a separately evidenced automatic scale-in event.
+
+---
+
+## 🔌 RDS Dependency Failure & Recovery — PASS
+
+Failure injection was performed by temporarily revoking the exact `ECS-SG → RDS-SG :5432` rule.
+
+```text
+Normal            health 200 / ready 200
+5432 revoked      health 200 / ready 502 observed through ALB
+5432 restored     health 200 / ready 200
+```
+
+The result demonstrates that the application process remained alive while its database-backed readiness path failed, then recovered after the dependency path was restored.
+
+<table><tr>
+<td width="50%" align="center"><b>🔌 Dependency failure</b><br><br><img src="evidence/rds-dependency-failure.png" width="100%" /></td>
+<td width="50%" align="center"><b>✅ Dependency recovery</b><br><br><img src="evidence/rds-dependency-recovery.png" width="100%" /></td>
+</tr></table>
+
+---
+
+## 📊 Observability
+
+Validation captured infrastructure state and telemetry across the stack: ECS CPU/memory and service state, ALB target health/request volume, RDS availability/connections and CloudWatch log streams.
+
+<table><tr>
+<td width="50%" align="center"><b>🩺 Infrastructure health</b><br><br><img src="evidence/observability-infrastructure-health.png" width="100%" /></td>
+<td width="50%" align="center"><b>📈 CloudWatch metrics</b><br><br><img src="evidence/observability-cloudwatch-metrics.png" width="100%" /></td>
+</tr></table>
 
 ---
 
 ## 💰 Cost-Conscious Engineering
 
-This lab intentionally avoids unnecessary persistent infrastructure:
+This lab deliberately avoided NAT Gateway, EKS, Multi-AZ RDS, WAF, Route 53/custom domain, Terraform and CI/CD. RDS/ALB/Fargate were kept only for the validation window.
 
-- 🚫 no NAT Gateway
-- 🚫 no EKS
-- 🚫 no Multi-AZ RDS
-- 🚫 no custom domain / Route 53
-- 🚫 no WAF
-- 🚫 no CI/CD in this phase
-- 🚫 no Terraform in this phase
-- ⏱️ RDS, ALB and Fargate exist only for the validation window
+The pre-cleanup Cost Explorer checkpoint showed negligible values / approximately `$0.00` visible for the captured period. Cost Explorer can lag, so this is documented as a checkpoint—not a final settled-cost guarantee.
 
-The account preflight passed under the existing AWS Free Plan/credit environment; **no account upgrade was performed or required for this build path**.
+<p align="center"><img src="evidence/phase05-cost-checkpoint.png" width="900" alt="Phase 05 cost checkpoint" /></p>
 
 ---
 
-## 🧠 Key Architecture Decisions
+## 🧠 Architecture Decisions
 
-### 🌍 Public Fargate for this short-lived lab
-Fargate tasks will receive public IPv4 addresses so they can pull from ECR and deliver logs without a NAT Gateway. Direct application ingress is still blocked because `ECS-SG` accepts port `8080` only from `ALB-SG`.
+### 🌍 Public Fargate for a short-lived lab
+Public IPv4 on Fargate avoids NAT Gateway cost/complexity while the ECS SG still blocks direct application ingress. Production extension: private tasks with controlled egress/VPC endpoints.
 
-➡️ See [`ADR-001`](decisions/ADR-001-public-fargate-for-short-lived-lab.md).
+➡️ [`ADR-001`](decisions/ADR-001-public-fargate-for-short-lived-lab.md)
 
 ### 🔓 HTTP for temporary validation
-The temporary ALB uses HTTP `:80`. A production extension would use ACM + HTTPS and redirect HTTP to HTTPS.
+The short-lived ALB uses HTTP `:80`. Production extension: ACM + HTTPS + HTTP→HTTPS redirect.
 
-➡️ See [`ADR-002`](decisions/ADR-002-http-lab-production-tls.md).
+➡️ [`ADR-002`](decisions/ADR-002-http-lab-production-tls.md)
 
-### 🔐 Secrets instead of hardcoded credentials
-Database credentials live outside source and container layers. ECS will receive the required values through controlled IAM-backed secret injection.
+### 🔐 Externalized credentials
+Database credentials are stored in Secrets Manager rather than source code or image layers. Restore access to S3 used a separate least-privilege task role.
+
+### ❤️ Separate liveness from readiness
+ALB liveness checks `/api/health`; database dependency behavior is tested through `/api/ready`. This prevents a database outage from being misrepresented as a dead application process.
 
 ---
 
-## 📸 Evidence Gallery
+## 🚦 Project Progress
 
-> Every image below is committed under `evidence/` and supports a concrete engineering claim.
+| Workstream | Status |
+|---|---|
+| Gate 0 / retained artifacts | ✅ PASS |
+| Legacy source recovery | ✅ DONE |
+| Docker modernization | ✅ DONE |
+| ECR application image | ✅ DONE |
+| VPC / security / private RDS | ✅ DONE |
+| Legacy DB dump recovery + restore | ✅ DONE |
+| ECS Fargate + ALB | ✅ DONE |
+| End-to-end application/database | ✅ PASS |
+| Self-healing | ✅ PASS |
+| Target-tracking scale-out | ✅ PASS |
+| RDS dependency failure/recovery | ✅ PASS |
+| Observability | ✅ DONE |
+| Cost checkpoint | ✅ DONE |
+| Destructive cleanup | ▶️ NEXT |
+| Residual audit | ⏳ PENDING |
 
-<table>
-<tr>
-<td width="50%" align="center"><b>🔎 Recovery</b><br><br><img src="evidence/recovery-ec2-legacy-app-discovered.png" width="100%" /></td>
-<td width="50%" align="center"><b>🧹 Recovery Cleanup</b><br><br><img src="evidence/recovery-resources-cleaned-up.png" width="100%" /></td>
-</tr>
-<tr>
-<td width="50%" align="center"><b>🐳 Docker Build</b><br><br><img src="evidence/docker-build-success.png" width="100%" /></td>
-<td width="50%" align="center"><b>❤️ Container Health</b><br><br><img src="evidence/docker-container-health-success.png" width="100%" /></td>
-</tr>
-<tr>
-<td width="50%" align="center"><b>📦 ECR Push</b><br><br><img src="evidence/ecr-image-push-success.png" width="100%" /></td>
-<td width="50%" align="center"><b>🏷️ ECR v1</b><br><br><img src="evidence/ecr-console-v1-verified.png" width="100%" /></td>
-</tr>
-<tr>
-<td width="50%" align="center"><b>🌐 Network Routing</b><br><br><img src="evidence/public-network-routing-validated.png" width="100%" /></td>
-<td width="50%" align="center"><b>🛡️ Security Chain</b><br><br><img src="evidence/security-group-chain-validated.png" width="100%" /></td>
-</tr>
-</table>
+---
 
-➡️ Full evidence roadmap: [`evidence/README.md`](evidence/README.md)
+## 📸 Evidence
+
+All evidence lives in one flat `evidence/` directory. See the complete claim-by-claim index in [`evidence/README.md`](evidence/README.md).
+
+The only remaining evidence expected for final closeout is:
+
+```text
+phase05-final-cleanup.png
+phase05-residual-audit.png
+```
 
 ---
 
@@ -327,7 +311,7 @@ Database credentials live outside source and container layers. ECS will receive 
 ├── 🚀 README.md
 ├── 📍 CURRENT-STATE.md
 ├── 🎯 REPOSITORY-SCOPE.md
-├── 🚦 START-HERE-TOMORROW.md
+├── 🧭 START-HERE-TOMORROW.md
 ├── ✅ checklists/
 ├── 🧠 decisions/
 ├── 📚 docs/
@@ -335,24 +319,26 @@ Database credentials live outside source and container layers. ECS will receive 
 └── 🧰 runbooks/
 ```
 
-📋 Detailed implementation sequence: [`docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md`](docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md)  
-🧰 Operational commands: [`runbooks/00-execution-runbook.md`](runbooks/00-execution-runbook.md)  
-🧹 Cleanup: [`runbooks/99-cleanup-runbook.md`](runbooks/99-cleanup-runbook.md)
+📋 [`Frozen implementation plan`](docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md)  
+🧰 [`Execution record`](runbooks/00-execution-runbook.md)  
+🧹 [`Cleanup runbook`](runbooks/99-cleanup-runbook.md)
 
 ---
 
 ## 🔗 MADAR Transformation Continuity
 
 ```text
-Phase 01 ✅
-Phase 02 ✅
-Phase 03 ✅ Legacy workload migrated to AWS
+Phase 01 ✅ Foundation
+Phase 02 ✅ Platform/network evolution
+Phase 03 ✅ Legacy workload migration to AWS
 Phase 04 ✅ Hybrid identity & workforce access
-Phase 05 🔄 Application modernization with containers
+Phase 05 🟠 Application modernization validated — cleanup next
 ```
 
-Phase 05 is not a disconnected demo. It takes the workload recovered from the Phase 03 migration story and evolves its runtime toward managed, portable container operations.
+Phase 05 deliberately preserves the business workload while changing **how it runs**: from a VM-bound Flask application to an observable, load-balanced, self-healing and scalable container service.
 
-### 🏁 Definition of Done
+---
 
-> Phase 05 is complete only when the application works through the ALB, the database path is proven, self-healing/scaling/failure behavior is demonstrated with evidence, costs are captured, and all temporary infrastructure is cleaned up and audited.
+## 🏁 Definition of Done
+
+Technical validation is complete. Phase 05 will be marked fully complete only after the cleanup runbook removes Phase 05 resources, a residual audit proves no unexpected resources remain, and final closeout documentation is synchronized.
