@@ -1,272 +1,241 @@
-# Phase 05 Execution Runbook
+# 🧰 Phase 05 — Execution Runbook
 
-> This file is the operational companion to the frozen plan. It is intentionally prepared before deployment and will be updated with exact commands/results as the lab runs.
+> 📍 **Live checkpoint: 2026-09-03.** This runbook now records completed execution gates and the remaining operational path. Secret values must never be printed or committed.
 
-## Gate 0
+## 🟢 Gate 0 — Preflight
 
-Complete `../checklists/00-account-cost-preflight.md` first.
+**Status: COMPLETE / GO** ✅
 
-Do not proceed on a `NO-GO` result.
+Verified account/credits, Phase 03 retained artifacts and required service access. No AWS account upgrade was performed.
 
-## Gate 1 — Recover the legacy application
+## 🟢 Gate 1 — Recover Legacy Application
 
-Launch a temporary EC2 instance from:
+**Status: COMPLETE** ✅
 
-```text
-ami-0cbd2e9ec0d6f9168
-```
-
-Initial inspection checklist on the recovered host:
-
-```bash
-hostnamectl
-cat /etc/os-release
-python3 --version
-ps aux | grep -i -E 'flask|gunicorn|python'
-sudo systemctl list-units --type=service | grep -i -E 'madar|flask|gunicorn'
-sudo ss -lntp
-```
-
-Search likely application locations without copying secrets blindly:
-
-```bash
-sudo find /opt /srv /var/www /home -maxdepth 4 \
-  -type f \( -name 'app.py' -o -name 'wsgi.py' -o -name 'requirements.txt' -o -name 'pyproject.toml' \) \
-  2>/dev/null
-```
-
-Inspect systemd service definitions if present:
-
-```bash
-sudo systemctl cat <service-name>
-```
-
-Record:
-
-- app path,
-- startup command,
-- Python version,
-- port,
-- dependencies,
-- DB environment/configuration,
-- filesystem dependencies,
-- log paths,
-- hardcoded addresses.
-
-### Secret hygiene
-
-Before copying source, scan filenames/configuration for likely secrets. Never commit values.
-
-```bash
-grep -RniE 'password|secret|token|access[_-]?key|private[_-]?key' <app-path> 2>/dev/null
-```
-
-Replace real values with placeholders or environment-variable lookups.
-
-### Extract only application artifacts
-
-Target repository content after recovery should look conceptually like:
+Recovery source:
 
 ```text
-src/
-  app.py
-  templates/
-  static/
-  ...
-requirements.txt
+AMI: ami-0cbd2e9ec0d6f9168
 ```
 
-Do not commit `/etc`, SSH material, `.env`, database credentials, shell histories or machine-specific secrets.
-
-After safe extraction and independent verification, terminate the temporary recovery EC2.
-
-## Gate 2 — Containerize locally
-
-Planned Dockerfile pattern after source assessment:
-
-```dockerfile
-FROM python:3.12-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ .
-RUN useradd --create-home appuser && chown -R appuser:appuser /app
-USER appuser
-EXPOSE 8080
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "app:app"]
-```
-
-The exact Python version/module entrypoint must come from the recovered application, not assumption.
-
-Build/test:
-
-```bash
-docker build -t madar-app:p05-local .
-docker run --rm -p 8080:8080 \
-  --env-file .env.local \
-  madar-app:p05-local
-```
-
-Validation:
-
-```bash
-curl -i http://localhost:8080/api/health
-```
-
-Do not push until local container validation passes.
-
-## Gate 3 — ECR
-
-Create one private ECR repository with a Phase 05 name. Capture repository URI.
-
-Use versioned tags such as:
+Recovered workload:
 
 ```text
-p05-v1
-<git-short-sha>
+/home/madaradmin/madar-legacy-app
+├── app.py
+├── templates/
+├── static/
+├── scripts/
+└── seed_data.py
 ```
 
-Record the final image digest used by ECS.
+The imported VMware-origin AMI retained its historical OS login configuration rather than injecting the selected EC2 key as expected. The application was inspected and extracted safely. No credentials from that host belong in Git.
 
-## Gate 4 — Network / database / IAM foundation
+Temporary recovery resources were subsequently terminated/deleted, including the detached root EBS volume and recovery security group.
 
-Planned CIDR should avoid conflict with earlier MADAR ranges. Proposed:
+## 🟢 Gate 2 — Containerize Locally
+
+**Status: COMPLETE** ✅
+
+Final runtime design:
 
 ```text
-VPC                 10.60.0.0/16
-Public-A            10.60.1.0/24
-Public-B            10.60.2.0/24
-Private-DB-A        10.60.11.0/24
-Private-DB-B        10.60.12.0/24
+Base       python:3.12-slim
+Runtime    gunicorn
+Bind       0.0.0.0:8080
+Workers    2
+User       madar (non-root)
 ```
 
-Do not treat these as final until Gate 0 confirms no conflict.
-
-Security Groups:
+Validated locally:
 
 ```text
-ALB-SG
-  inbound 80 from 0.0.0.0/0
-
-ECS-SG
-  inbound app-port from ALB-SG only
-
-RDS-SG
-  inbound 5432 from ECS-SG only
+docker build                         ✅
+container starts                     ✅
+/api/health                          200 / status ok ✅
+/api/ready without local PostgreSQL  503 / expected ✅
+container UID                        1000 / non-root ✅
 ```
 
-Create RDS only after SG/subnet-group foundation exists.
-
-Wait for RDS `available` before initialization.
-
-## Gate 5 — ECS / Fargate
-
-Initial task resources:
+Database configuration was externalized through:
 
 ```text
-CPU     256 (.25 vCPU)
+MADAR_DB_HOST
+MADAR_DB_PORT
+MADAR_DB_NAME
+MADAR_DB_USER
+MADAR_DB_PASSWORD
+```
+
+## 🟢 Gate 3 — Amazon ECR
+
+**Status: COMPLETE** ✅
+
+```text
+Repository  madar-phase05-app
+Tag         v1
+Digest      sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
+Scan push   enabled
+Encryption  AES256
+```
+
+## 🟡 Gate 4 — Network / Database / IAM Foundation
+
+**Status: IN PROGRESS** 🔄
+
+### 🌐 Network — COMPLETE
+
+```text
+VPC        10.60.0.0/16
+Public-A   10.60.1.0/24  us-east-1a
+Public-B   10.60.2.0/24  us-east-1b
+Private-A  10.60.11.0/24 us-east-1a
+Private-B  10.60.12.0/24 us-east-1b
+```
+
+Public route table has `0.0.0.0/0 → IGW`. Private route table has local routing only. No NAT Gateway.
+
+### 🛡️ Security Groups — COMPLETE
+
+```text
+0.0.0.0/0 → ALB-SG :80
+ALB-SG     → ECS-SG :8080
+ECS-SG     → RDS-SG :5432
+```
+
+### 🐘 RDS — AVAILABLE
+
+```text
+Identifier           madar-p05-postgres
+Engine               PostgreSQL 18.3
+Class                db.t4g.micro
+Database             madar_legacy
+Storage              20 GB gp3
+Single-AZ            yes
+PubliclyAccessible   false
+```
+
+DB subnet group spans the two private subnets. Current temporary lab storage reports encryption disabled; production hardening should enable encryption at rest.
+
+### 🔐 Secrets Manager — COMPLETE
+
+Secret name:
+
+```text
+MADAR/Phase05/Postgres
+```
+
+Never retrieve the secret value into screenshots/logs/Git.
+
+### 🔑 IAM — CURRENT STEP
+
+Created:
+
+```text
+MADAR-P05-ECS-ExecutionRole
+Trust principal = ecs-tasks.amazonaws.com
+```
+
+Next actions:
+
+1. attach `AmazonECSTaskExecutionRolePolicy`,
+2. add least-privilege permission for the specific Phase 05 secret,
+3. create a minimal application Task Role only if needed.
+
+## ⏳ Gate 5 — ECS / Fargate
+
+Remaining:
+
+```text
+📊 Create CloudWatch log group
+🚀 Create ECS cluster
+📋 Register task definition
+🏃 Run initial Fargate task
+📦 Verify ECR pull
+📊 Verify awslogs delivery
+🐘 Initialize/validate PostgreSQL schema/data through controlled ECS path
+🩺 Verify task → RDS / DB-backed endpoint
+```
+
+Initial task resources remain:
+
+```text
+CPU     256
 Memory  512 MiB
+Network awsvpc
+Public  ENABLED for short-lived lab
+Port    8080
 ```
 
-Network:
+## ⏳ Gate 6 — ALB / ECS Service
+
+Create only after initial task/runtime validation:
 
 ```text
-awsvpc
-assignPublicIp = ENABLED
+Target group type  ip
+Health path        /api/health
+ALB listener       HTTP :80
+ALB subnets        Public-A + Public-B
+ECS ingress        only from ALB-SG
 ```
 
-Baseline desired count:
+Then create ECS service and validate application traffic through ALB DNS.
+
+## ⏳ Gate 7 — HA / Failure / Scaling
+
+### ♻️ Task Replacement
 
 ```text
-1
+desiredCount=2
+→ two healthy targets
+→ intentionally stop one task
+→ ECS starts replacement
+→ replacement becomes healthy
+→ desired count restored
 ```
 
-Expected task-definition elements:
+### 📈 Auto Scaling
 
-- ECR image digest/tag,
-- app port 8080 (or recovered application port if intentionally changed),
-- `awslogs`,
-- Secrets Manager injection,
-- execution role,
-- minimal/empty task role unless S3 is needed,
-- container-level health command if useful.
+Configure ECS Service Application Auto Scaling target tracking, generate controlled load and capture scale-out plus scale-in.
 
-## Gate 6 — ALB
+### 🔌 Database Dependency Failure
 
-- target group type `ip`,
-- ALB across two public subnets,
-- health path `/api/health`,
-- HTTP listener 80,
-- ECS service registers tasks dynamically.
-
-Capture evidence that healthy targets are task IPs rather than EC2 instances.
-
-## Gate 7 — Validation / failure / scaling
-
-### Functional
-
-```bash
-curl -i http://<alb-dns>/api/health
-curl -i http://<alb-dns>/api/ready
-curl -i http://<alb-dns>/<database-backed-endpoint>
-```
-
-### Two-task load balancing
-
-Set desired count to 2 and wait for two healthy targets.
-
-### Task replacement
-
-Stop one running task manually. Record timestamps for:
-
-```text
-stopped
-→ replacement pending
-→ replacement running
-→ target initial
-→ target healthy
-```
-
-### Auto Scaling
-
-Use target tracking on average ECS service CPU. Start with a deliberately observable threshold appropriate for the test.
-
-Generate controlled load with `hey` or `ab`. Capture:
-
-- baseline CPU,
-- threshold crossing,
-- desired/running count change,
-- new target healthy,
-- scale-in after load stops.
-
-### RDS dependency failure
-
-Temporarily remove/revoke the ECS-SG → RDS-SG 5432 rule.
+Temporarily revoke `ECS-SG → RDS-SG :5432`.
 
 Expected:
 
 ```text
-/api/health remains application-alive
-/api/ready or DB-backed API fails predictably
+/api/health remains healthy
+/api/ready or DB-backed endpoint fails
 ```
 
 Restore the rule and prove recovery.
 
-## Gate 8 — Evidence / cost / cleanup
+## ⏳ Gate 8 — Evidence / Cost / Cleanup
 
-Before deletion capture:
+Before destructive cleanup capture:
 
-- architecture IDs,
-- ECR image/digest,
-- task-definition/service state,
-- ALB healthy target evidence,
-- RDS private configuration,
-- SG chain,
-- CloudWatch logs,
-- two-target state,
-- stopped-task replacement,
-- auto-scaling event/metrics,
-- dependency failure/recovery,
-- Cost Explorer checkpoint.
+- 📋 task definition/service state,
+- ⚖️ ALB healthy targets,
+- 🐘 private RDS configuration,
+- 📊 logs/metrics,
+- ♻️ task replacement,
+- 📈 scaling,
+- 🔌 dependency failure/recovery,
+- 💰 Cost Explorer checkpoint.
 
-Then execute `99-cleanup-runbook.md`.
+Then execute `99-cleanup-runbook.md` and run a residual-resource audit.
+
+## 🧭 Current Resume Point
+
+```text
+🔑 Finish ECS Execution Role permissions
+      ↓
+📊 CloudWatch log group
+      ↓
+🚀 ECS cluster
+      ↓
+📋 Task definition
+      ↓
+🏃 Initial Fargate task
+```
