@@ -1,43 +1,66 @@
-# Repository Scope
+# 🎯 Repository Scope — MADAR Phase 05
 
-This repository contains the implementation record for **MADAR Phase 05 — Application Modernization with Containers**.
+This repository is the implementation and evidence record for **MADAR Phase 05 — Application Modernization with Containers**.
 
-## In scope
+## 🚀 In Scope
 
-- recover the existing MADAR Flask application from the retained Phase 03 AMI,
-- remove VM-specific runtime assumptions,
-- containerize with Docker and Gunicorn,
-- publish the image to Amazon ECR,
-- run the application using Amazon ECS on AWS Fargate,
-- place an Application Load Balancer in front of the ECS service,
-- use a private Amazon RDS PostgreSQL database,
-- externalize credentials,
-- implement minimum useful logging/metrics,
-- validate load balancing, task replacement, dependency failure and auto scaling,
-- capture evidence and cost,
-- remove temporary AWS resources and prove cleanup.
+- 🔎 recover the existing MADAR Flask application from the retained Phase 03 AMI,
+- 🧹 remove VM-specific runtime assumptions,
+- 🐳 containerize with Docker + Gunicorn + non-root execution,
+- 📦 publish a versioned image to Amazon ECR,
+- 🚀 run the application using Amazon ECS on AWS Fargate,
+- ⚖️ place an Application Load Balancer in front of the ECS service,
+- 🐘 use a private Amazon RDS PostgreSQL data layer,
+- 🔐 externalize database credentials with Secrets Manager,
+- 🛡️ enforce `Internet → ALB → ECS → RDS` security-group boundaries,
+- 📊 capture useful CloudWatch/ECS/ALB/RDS observability,
+- ♻️ validate task replacement/self-healing,
+- 📈 validate controlled auto scaling,
+- 🔌 validate database dependency failure and recovery,
+- 💰 capture cost evidence,
+- 🧹 remove temporary AWS resources and prove residual cleanup.
 
-## Explicitly out of scope
+## 🚫 Explicitly Out of Scope
 
-- EKS / Kubernetes,
-- production-grade Multi-AZ RDS,
-- NAT Gateway for the short-lived lab,
-- full private Fargate + VPC endpoint production networking,
-- WAF,
-- Route 53/custom domain purchase,
-- mandatory HTTPS for the temporary lab,
-- Terraform/IaC,
-- CI/CD/GitHub Actions deployment automation,
-- application rewrite or microservice decomposition.
+- ☸️ EKS / Kubernetes,
+- 🐘 production-grade Multi-AZ RDS,
+- 💸 NAT Gateway for the short-lived lab,
+- 🔒 full private Fargate + VPC endpoint production networking,
+- 🧱 WAF,
+- 🌐 Route 53/custom domain purchase,
+- 🔏 mandatory HTTPS for this temporary lab,
+- 🏗️ Terraform/IaC,
+- 🔁 CI/CD/GitHub Actions deployment automation,
+- 🧩 application rewrite or microservice decomposition.
 
-These exclusions are deliberate. Phase 05 focuses on **runtime modernization and container operations**. Delivery automation and broader platform engineering can be addressed by later MADAR phases.
+These exclusions are deliberate: **Phase 05 demonstrates runtime modernization and container operations.** Delivery automation and broader platform engineering belong in later dedicated phases.
 
-## Source-of-truth hierarchy
+## 🧠 Lab vs Production
 
-1. `CURRENT-STATE.md` — what is actually true now.
-2. `docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md` — approved plan before deployment.
-3. `runbooks/` — commands/procedures used during execution.
-4. `evidence/` — proof supporting final claims.
-5. `decisions/` — why key architecture trade-offs were made.
+```text
+🧪 LAB
+Public Fargate ENIs + strict SG ingress
+HTTP ALB listener
+Single-AZ temporary RDS
+No NAT Gateway
 
-No document may claim a resource or validation step is complete until execution evidence exists.
+🏭 PRODUCTION EXTENSION
+Private Fargate tasks
+Controlled egress / VPC endpoints as appropriate
+HTTPS + ACM
+Encrypted / highly available database design
+IaC + CI/CD
+```
+
+## 📚 Source-of-Truth Hierarchy
+
+1. 📍 `CURRENT-STATE.md` — what is actually true now.
+2. 🚀 `README.md` — portfolio-facing architecture/story/progress.
+3. 📋 `docs/PHASE-05-FROZEN-IMPLEMENTATION-PLAN.md` — approved execution plan.
+4. 🧰 `runbooks/` — operational procedures.
+5. 📸 `evidence/` — proof supporting project claims.
+6. 🧠 `decisions/` — architecture trade-offs.
+
+## 🛡️ Claim Rule
+
+No document may claim a validation gate is complete until execution has actually occurred. Planned production improvements must be labeled as recommendations rather than represented as deployed controls.
