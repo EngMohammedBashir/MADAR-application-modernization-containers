@@ -1,107 +1,74 @@
 # 🧭 START / RESUME HERE — MADAR Phase 05
 
-> 🟡 **LIVE CHECKPOINT — 2026-09-03**  
-> This file originally described Day One. Gate 0 and the early implementation gates are now complete, so it now serves as the safest resume point for the next session.
+> 🟠 **CHECKPOINT — 2026-09-03**  
+> Build and validation work is complete. Resume at **destructive cleanup**, not implementation.
 
-## ✅ Already Completed
+## ✅ Completed
 
 ```text
-🧾 Gate 0 account/cost/artifact preflight       ✅
-🔎 Retained AMI recovery                        ✅
-🧹 Temporary recovery EC2/EBS/SG cleanup        ✅
-🐳 Flask modernization + Docker build           ✅
-❤️ Local container validation                   ✅
-📦 ECR repository + v1 push                     ✅
-🌐 VPC + 4 subnets + IGW + route tables         ✅
-🛡️ ALB/ECS/RDS security-group chain             ✅
-🐘 Private RDS PostgreSQL                       ✅ available
-🔐 Secrets Manager DB connection secret         ✅
-🔑 ECS Execution Role trust relationship        ✅
+Gate 0 / cost preflight                    ✅
+Legacy app recovery + cleanup              ✅
+Docker modernization + local tests         ✅
+Application ECR v1                         ✅
+VPC / routing / SG chain                   ✅
+Private RDS PostgreSQL                     ✅
+Legacy DB dump recovered from snapshot     ✅
+Controlled Fargate DB restore              ✅
+Secrets Manager / IAM                      ✅
+ECS Fargate service                        ✅
+ALB + healthy target                       ✅
+End-to-end app/database validation         ✅
+2-task self-healing                        ✅
+Target-tracking automatic scale-out        ✅
+RDS dependency failure + recovery          ✅
+CloudWatch/infra observability             ✅
+Cost checkpoint                            ✅
 ```
 
 ## 📍 Resume Exactly Here
 
-Current role:
+**Execute `runbooks/99-cleanup-runbook.md`.**
+
+Do not repeat load, self-healing or RDS failure tests unless evidence is found to be missing.
+
+## 🧹 Cleanup Priority
 
 ```text
-MADAR-P05-ECS-ExecutionRole
-Trust principal: ecs-tasks.amazonaws.com
+1  Auto Scaling policy + scalable target
+2  ECS service/tasks
+3  ALB listener + ALB + target group
+4  App/restore/verify task definitions + ECS cluster
+5  RDS + DB subnet group
+6  Secrets Manager + CloudWatch log group
+7  ECR: madar-phase05-app + madar-p05-restore
+8  IAM: execution + restore task roles/policies
+9  SGs + subnets + custom route tables + IGW + VPC
+10 residual audit + final cost closeout
 ```
 
-### ▶️ Next action
-
-Attach the standard ECS task execution managed policy, then add narrowly scoped Secrets Manager access for the Phase 05 PostgreSQL secret.
-
-After IAM:
+## 🚫 Preserve Phase 03 Retained Assets
 
 ```text
-🔑 IAM execution permissions
-      ↓
-📊 CloudWatch log group
-      ↓
-🚀 ECS cluster
-      ↓
-📋 Task definition
-      ↓
-🏃 Initial Fargate task
-      ↓
-🐘 Verify task → RDS
-      ↓
-⚖️ Target group + ALB + ECS service
+AMI       ami-0cbd2e9ec0d6f9168
+Snapshot  snap-0920a020c47fb6447
+S3        madar-operational-files-197821101770
 ```
 
-## 🔒 Live Architecture IDs
+Do not delete these as part of Phase 05 cleanup.
+
+## 📸 Evidence Already Present
+
+The repository now includes evidence for database recovery/restore, Fargate runtime, ALB health, live dashboard, two-target HA test, task self-healing, automatic scale-out, RDS dependency failure/recovery, observability and the cost checkpoint.
+
+The only required new portfolio evidence is now cleanup/residual-audit proof.
+
+Suggested final files:
 
 ```text
-VPC        vpc-011a441b0a790c458
-Public-A   subnet-024a57f44c014ab2a
-Public-B   subnet-0726ef657d0ab0ca5
-Private-A  subnet-0ba1f1f304eec85cb
-Private-B  subnet-0395c2043842856ce
-IGW        igw-0df8ed399478fa879
-Public RT  rtb-076fdacedac35cd66
-Private RT rtb-0ed3daeca13e9987e
-ALB-SG     sg-00b9b70e13293ff46
-ECS-SG     sg-0d13f6af551e284c8
-RDS-SG     sg-00ae439cb916d164b
+phase05-final-cleanup.png
+phase05-residual-audit.png
 ```
 
-## 🐘 Live Database
+## 🏁 Closeout
 
-```text
-DB ID       madar-p05-postgres
-DB name     madar_legacy
-Engine      PostgreSQL 18.3
-Class       db.t4g.micro
-Public      false
-AZ          us-east-1a
-Secret      MADAR/Phase05/Postgres
-```
-
-Never print or commit the secret value.
-
-## 📦 Container Artifact
-
-```text
-ECR repository  madar-phase05-app
-Tag             v1
-Digest          sha256:2564714f2668c95ab89c81e95e438a63d14c9d66194ea7eda6a34df59ab99346
-App port        8080
-Health          /api/health
-Readiness       /api/ready
-```
-
-## 💰 Cost Reminder
-
-🐘 RDS is currently a live cost clock. Keep the implementation moving and delete it after all required evidence/testing.  
-🚫 Do not add NAT Gateway.  
-🚫 Do not upgrade the AWS account for this phase.  
-⚖️ Create ALB only when the ECS runtime is ready to register targets.
-
-## 📸 Next Meaningful Evidence
-
-Do not screenshot routine IAM commands. The next strong portfolio evidence should prove the ECS task definition/runtime security configuration and then a `RUNNING` Fargate task with logs.
-
-## 🧹 Do Not Forget
-
-Phase 05 is not finished until the failure/scaling tests, cost checkpoint, destructive cleanup and residual-resource audit are complete.
+After cleanup, update `CURRENT-STATE.md` and `README.md` from **cleanup pending** to **Phase 05 complete**, then update the MADAR master repository.
